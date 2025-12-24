@@ -3,7 +3,12 @@ Verilib structure files for outlining verification goals
 
 ## Installation
 
-1. Install proof tools: Verus, Verus Analyzer, SCIP.
+1. Install dependencies for Blueprint.
+   ```
+   apt install libgraphviz-dev graphviz
+   ```
+
+2. Install proof tools: Verus, Verus Analyzer, SCIP.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/installers_for_various_tools
    cd installers_for_various_tools
@@ -12,11 +17,17 @@ Verilib structure files for outlining verification goals
    python3 scip_installer.py
    ```
 
-2. Install atomization and verification tool.
+3. Install atomization and verification tool.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/scip-atoms
    cd scip-atoms
    cargo install --path .
+   ```
+
+4. Install Structure.
+   ```
+   git clone git@github.com:Beneficial-AI-Foundation/verilib-structure.git
+   export VERILIB_STRUCTURE_PATH=$(pwd)/verilib-structure
    ```
 
 ## Scripts
@@ -273,8 +284,6 @@ Total certs: 10 → 13
 
 1. Create structure files
    ```
-   git clone git@github.com:Beneficial-AI-Foundation/verilib-structure.git
-   export VERILIB_STRUCTURE_PATH=$(pwd)/verilib-structure
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
@@ -286,12 +295,36 @@ Total certs: 10 → 13
    uv run $VERILIB_STRUCTURE_PATH/scripts/structure_atomize.py
    ```
 
-2. Run specification checks
+3. Run specification checks
    ```
    uv run $VERILIB_STRUCTURE_PATH/scripts/structure_specify.py
    ```
 
-3. Run verification checks
+4. Run verification checks
+   ```
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
+   ```
+
+### Dalek-Lite
+
+1. Create structure files
+   ```
+   git clone git@github.com:Beneficial-AI-Foundation/equational_theories.git
+   cd equational_theories
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_create.py --type blueprint --form json
+   ```
+
+2. Run atomization checks
+   ```
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_atomize.py
+   ```
+
+3. Run specification checks
+   ```
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_specify.py
+   ```
+
+4. Run verification checks
    ```
    uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
    ```
