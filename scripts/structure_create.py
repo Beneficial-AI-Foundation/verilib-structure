@@ -2,7 +2,6 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "beartype",
 #   "leanblueprint",
 #   "lxml",
 # ]
@@ -27,20 +26,17 @@ Usage:
 """
 
 import argparse
-import io
+import csv
 import json
 import re
 import shutil
 import subprocess
 import sys
 from collections import Counter
-from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
 from lxml import html
-
-from analyze_verus_specs_proofs import analyze_functions
 
 
 # =============================================================================
@@ -368,6 +364,97 @@ def blueprint_to_structure(blueprint_data: dict[str, dict[str, Any]]) -> dict[st
 # Dalek-lite functions
 # =============================================================================
 
+def run_analyze_verus_specs_proofs(
+    project_root: Path, seed_path: Path, output_path: Path
+) -> None:
+    """
+    Run analyze_verus_specs_proofs.py CLI to generate tracked functions CSV.
+
+    The script is expected to be at <project_root>/scripts/analyze_verus_specs_proofs.py.
+
+    Args:
+        project_root: The project root directory.
+        seed_path: Path to the input functions_to_track.csv file.
+        output_path: Path to write the output CSV file.
+
+    Raises:
+        subprocess.CalledProcessError: If the command fails.
+        FileNotFoundError: If the script is not found.
+    """
+    script_path = project_root / "scripts" / "analyze_verus_specs_proofs.py"
+    if not script_path.exists():
+        raise FileNotFoundError(f"Script not found: {script_path}")
+
+    print(f"Running analyze_verus_specs_proofs.py...")
+    result = subprocess.run(
+        [
+            "uv", "run", str(script_path),
+            "--seed", str(seed_path.relative_to(project_root)),
+            "--output", str(output_path.relative_to(project_root)),
+        ],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Error running analyze_verus_specs_proofs.py:\n{result.stderr}", file=sys.stderr)
+        raise subprocess.CalledProcessError(result.returncode, "analyze_verus_specs_proofs.py")
+    print(f"Generated tracked functions CSV at {output_path}")
+
+
+def read_tracked_csv(csv_path: Path) -> dict[str, tuple]:
+    """
+    Read tracked functions CSV and return a dictionary.
+
+    The CSV has columns: function, module, link, has_spec, has_proof
+
+    Args:
+        csv_path: Path to the tracked functions CSV file.
+
+    Returns:
+        Dictionary mapping unique key to tuple of:
+            (has_spec, has_proof, is_external_body, line_number, github_link, qualified_name, module, impl_block)
+        This matches the format returned by analyze_functions() for compatibility.
+    """
+    results = {}
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            function = row['function']
+            module = row['module']
+            link = row['link']
+            has_spec_val = row['has_spec']
+            has_proof_val = row['has_proof']
+
+            # Parse has_spec: "yes", "ext", or empty
+            has_spec = has_spec_val in ('yes', 'ext')
+            is_external_body = has_spec_val == 'ext'
+            has_proof = has_proof_val == 'yes'
+
+            # Extract line number from link
+            line_number = 0
+            if link and '#L' in link:
+                try:
+                    line_number = int(link.rsplit('#L', 1)[1])
+                except ValueError:
+                    pass
+
+            # Create unique key (function + module)
+            result_key = f"{function}::{module}"
+            results[result_key] = (
+                has_spec,
+                has_proof,
+                is_external_body,
+                line_number,
+                link,           # index 4: github_link
+                function,       # index 5: qualified_name
+                module,         # index 6: module
+                "",             # index 7: impl_block (not in CSV output)
+            )
+
+    return results
+
+
 def tweak_disambiguate(tracked: dict) -> dict:
     """
     Disambiguate tracked items that have the same qualified_name.
@@ -660,9 +747,12 @@ def main() -> None:
             print(f"Error: {tracked_path} not found", file=sys.stderr)
             sys.exit(1)
 
-        print("Analyzing source code to derive list of functions to track...")
-        with redirect_stdout(io.StringIO()):
-            tracked = analyze_functions(tracked_path, project_root)
+        # Run analyze_verus_specs_proofs.py CLI to generate tracked functions CSV
+        tracked_output_path = verilib_path / "tracked_functions.csv"
+        run_analyze_verus_specs_proofs(project_root, tracked_path, tracked_output_path)
+
+        # Read the generated CSV
+        tracked = read_tracked_csv(tracked_output_path)
         tracked = tweak_disambiguate(tracked)
         structure = tracked_to_structure(tracked)
 
