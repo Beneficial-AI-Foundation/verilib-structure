@@ -34,7 +34,10 @@ Verilib structure files for outlining verification goals
 
 ### structure_create.py
 
-Generates structure files from tracked functions. Analyzes source code to identify functions and creates `.md` files with YAML frontmatter containing metadata.
+Generates structure files from source analysis. Supports two structure types:
+
+- **dalek-lite**: Analyzes Verus/Rust code via `analyze_verus_specs_proofs.py`
+- **blueprint**: Runs `leanblueprint web` and parses dependency graph
 
 **Usage:**
 
@@ -54,7 +57,7 @@ uv run scripts/structure_create.py [project_root] --type <type> [--form <form>] 
 |--------|--------|-------------|
 | `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
 | `--form` | `json`, `files` | Structure form (default: `json`) |
-| `--root` | path | Root directory for structure files, relative to project root (default: `.verilib`) |
+| `--root` | path | Root directory for structure files (default: `.verilib`, ignored for blueprint which uses `blueprint`) |
 
 **Structure forms:**
 
@@ -75,22 +78,20 @@ Creates `<project_root>/.verilib/config.json` with:
 **Examples:**
 
 ```bash
-# Generate JSON structure file (current directory)
+# Dalek-lite: Generate JSON structure file
 uv run scripts/structure_create.py --type dalek-lite --form json
 
-# Generate JSON structure file for a specific project
-uv run scripts/structure_create.py /path/to/project --type dalek-lite --form json
-
-# Generate .md file hierarchy in default location (.verilib/)
+# Dalek-lite: Generate .md file hierarchy
 uv run scripts/structure_create.py --type dalek-lite --form files
 
-# Generate .md file hierarchy in custom location (relative to project root)
-uv run scripts/structure_create.py --type dalek-lite --form files --root my-structure
+# Blueprint: Generate JSON structure file (default)
+uv run scripts/structure_create.py --type blueprint
+
+# Blueprint: Generate .md file hierarchy
+uv run scripts/structure_create.py --type blueprint --form files
 ```
 
-**Generated file format:**
-
-Each `.md` file contains YAML frontmatter with:
+**Generated file format (dalek-lite):**
 
 ```yaml
 ---
@@ -100,9 +101,22 @@ scip-name: null
 ---
 ```
 
+**Generated file format (blueprint):**
+
+```yaml
+---
+veri-name: veri:node_id
+dependencies: [veri:dep1, veri:dep2]
+---
+<content from blueprint>
+```
+
 ### structure_atomize.py
 
-Updates structure files by syncing with SCIP atoms. Runs `scip-atoms` to generate source code intelligence data, then updates the structure with `scip-name` identifiers and populates metadata.
+Enriches structure files with metadata. Behavior depends on structure type:
+
+- **dalek-lite**: Runs `scip-atoms` to generate SCIP data, syncs structure with `scip-name` identifiers
+- **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
 **Note:** Requires `config.json` created by `structure_create.py`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
 
@@ -120,8 +134,8 @@ uv run scripts/structure_atomize.py [project_root]
 
 **Structure forms (from config):**
 
-- `json`: Updates `<project_root>/.verilib/structure_files.json` with scip-names and generates `<project_root>/.verilib/structure_meta.json` with metadata
-- `files`: Updates `.md` files with scip-names and generates companion `.meta.verilib` and `.atom.verilib` files
+- `json`: Generates `<project_root>/.verilib/structure_meta.json` with metadata
+- `files`: Generates companion `.meta.verilib` and `.atom.verilib` files
 
 **Examples:**
 
@@ -133,7 +147,7 @@ uv run scripts/structure_atomize.py
 uv run scripts/structure_atomize.py /path/to/project
 ```
 
-**Generated metadata format (JSON):**
+**Generated metadata format (dalek-lite):**
 
 The `structure_meta.json` file maps scip-name to metadata:
 
@@ -143,23 +157,37 @@ The `structure_meta.json` file maps scip-name to metadata:
     "code-path": "curve25519-dalek/src/montgomery.rs",
     "code-lines": { "start": 42, "end": 50 },
     "code-module": "montgomery",
-    "dependencies": ["..."],
+    "dependencies": ["scip:..."],
     "specified": false,
     "visible": true
   }
 }
 ```
 
-**Generated metadata format (files):**
+**Generated metadata format (blueprint):**
+
+```json
+{
+  "veri:node_id": {
+    "dependencies": ["veri:dep1", "veri:dep2"],
+    "visible": true
+  }
+}
+```
+
+**Generated files (files form):**
 
 For each `XXX.md` file, creates:
 
-- `XXX.meta.verilib`: JSON metadata (same fields as above, plus `scip-name`)
-- `XXX.atom.verilib`: Raw source code extracted from the original file
+- `XXX.meta.verilib`: JSON metadata
+- `XXX.atom.verilib`: Source code (dalek-lite) or content from blueprint.json (blueprint)
 
 ### structure_specify.py
 
-Checks specification status of functions and manages specification certs. Runs `scip-atoms specify` to identify functions with specs (requires/ensures), compares with existing certs, and lets users validate uncertified functions.
+Checks specification status and manages specification certs. Behavior depends on structure type:
+
+- **dalek-lite**: Runs `scip-atoms specify` to identify functions with `requires`/`ensures` specs
+- **blueprint**: Checks `type-status` in `blueprint.json` (`stated` or `mathlib` = has spec)
 
 **Usage:**
 
@@ -175,15 +203,24 @@ uv run scripts/structure_specify.py [project_root]
 
 **Workflow:**
 
-1. Runs `scip-atoms specify` to check which functions have `requires` or `ensures` specs
+1. Identifies functions with specs (dalek-lite: requires/ensures, blueprint: type-status)
 2. Compares with existing certs in `.verilib/certs/specify/`
 3. Displays a multiple choice menu of uncertified functions
 4. Creates cert files for user-selected functions
 
+**Blueprint type-status mapping:**
+
+| type-status | Has Spec? |
+|-------------|-----------|
+| `stated` | Yes |
+| `mathlib` | Yes |
+| `can-state` | No |
+| `not-ready` | No |
+
 **Cert files:**
 
 Certs are stored in `.verilib/certs/specify/` with one JSON file per certified function:
-- Filename: URL-encoded scip-name + `.json`
+- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -206,7 +243,10 @@ When prompted, you can enter:
 
 ### structure_verify.py
 
-Runs verification and automatically manages verification certs. Creates certs for newly verified functions and deletes certs for functions that now fail verification.
+Runs verification and automatically manages verification certs. Behavior depends on structure type:
+
+- **dalek-lite**: Runs `scip-atoms verify` to check proof status
+- **blueprint**: Checks `term-status` in `blueprint.json` (`fully-proved` = verified)
 
 **Usage:**
 
@@ -224,21 +264,30 @@ uv run scripts/structure_verify.py [project_root] [--verify-only-module <module>
 
 | Option | Description |
 |--------|-------------|
-| `--verify-only-module` | Only verify functions in this module (e.g., `edwards`) |
+| `--verify-only-module` | Only verify functions in this module (dalek-lite only) |
 
 **Workflow:**
 
-1. Runs `scip-atoms verify` to check which functions pass verification
+1. Checks verification status (dalek-lite: scip-atoms, blueprint: term-status)
 2. Filters to only functions in the structure
 3. Compares with existing certs in `.verilib/certs/verify/`
 4. Creates new certs for verified functions without certs
 5. Deletes certs for failed functions with existing certs
 6. Shows summary of all changes
 
+**Blueprint term-status mapping:**
+
+| term-status | Verified? |
+|-------------|-----------|
+| `fully-proved` | Yes |
+| `proved` | No |
+| `defined` | No |
+| `can-prove` | No |
+
 **Cert files:**
 
 Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
-- Filename: URL-encoded scip-name + `.json`
+- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -250,7 +299,7 @@ uv run scripts/structure_verify.py
 # Run verification for a specific project
 uv run scripts/structure_verify.py /path/to/project
 
-# Run verification for only the edwards module
+# Run verification for only the edwards module (dalek-lite only)
 uv run scripts/structure_verify.py --verify-only-module edwards
 ```
 
