@@ -8,12 +8,18 @@
 """
 Check specification status of functions and manage specification certs.
 
-This script:
-1. Runs scip-atoms specify to check which functions have specs (requires/ensures)
-2. Filters to only functions listed in the structure (from config.json)
-3. Compares with existing specification certs in .verilib/certs/specify/
-4. Shows functions with specs that don't have certs yet
-5. Lets user select functions to validate and create certs for
+For dalek-lite type:
+    1. Runs scip-atoms specify to check which functions have specs (requires/ensures)
+    2. Filters to only functions listed in the structure (from config.json)
+    3. Compares with existing specification certs in .verilib/certs/specify/
+    4. Shows functions with specs that don't have certs yet
+    5. Lets user select functions to validate and create certs for
+
+For blueprint type:
+    1. Reads blueprint.json and checks type-status for specs (stated, mathlib)
+    2. Compares with existing specification certs in .verilib/certs/specify/
+    3. Shows functions with specs that don't have certs yet
+    4. Lets user select functions to validate and create certs for
 
 Usage:
     uv run scripts/structure_specify.py [project_root]
@@ -147,6 +153,39 @@ def get_functions_with_specs(specs_data: dict) -> dict[str, dict]:
     return result
 
 
+# Type-status values that indicate a function has a spec
+BLUEPRINT_SPEC_STATUSES = {'stated', 'mathlib'}
+
+
+def get_blueprint_functions_with_specs(blueprint_path: Path) -> dict[str, dict]:
+    """
+    Get functions with specs from blueprint.json based on type-status.
+
+    Functions with type-status 'stated' or 'mathlib' are considered to have specs.
+
+    Args:
+        blueprint_path: Path to blueprint.json file.
+
+    Returns:
+        Dictionary mapping veri-name to blueprint node data for functions with specs.
+    """
+    if not blueprint_path.exists():
+        print(f"Warning: {blueprint_path} not found")
+        return {}
+
+    with open(blueprint_path, encoding='utf-8') as f:
+        blueprint_data = json.load(f)
+
+    result = {}
+    for node_id, node_info in blueprint_data.items():
+        type_status = node_info.get('type-status', '')
+        if type_status in BLUEPRINT_SPEC_STATUSES:
+            veri_name = f"veri:{node_id}"
+            result[veri_name] = node_info
+
+    return result
+
+
 def get_existing_certs(certs_dir: Path) -> set[str]:
     """
     Get the set of func_ids that already have certs.
@@ -170,49 +209,54 @@ def get_existing_certs(certs_dir: Path) -> set[str]:
     return existing
 
 
-def get_structure_scip_names(
+def get_structure_names(
+    structure_type: str,
     structure_form: str,
     structure_root: Path,
     structure_json_path: Path
 ) -> set[str]:
     """
-    Get the set of scip-names from the structure.
+    Get the set of identifier names from the structure.
 
     Args:
+        structure_type: Either "dalek-lite" or "blueprint".
         structure_form: Either "json" or "files".
         structure_root: Path to the structure root directory (for files form).
         structure_json_path: Path to structure_files.json (for json form).
 
     Returns:
-        Set of scip-names defined in the structure.
+        Set of identifier names defined in the structure (scip-name or veri-name).
     """
-    scip_names = set()
+    # Determine which field to look for based on structure type
+    name_field = "veri-name" if structure_type == "blueprint" else "scip-name"
+
+    names = set()
 
     if structure_form == "json":
         if not structure_json_path.exists():
             print(f"Warning: {structure_json_path} not found")
-            return scip_names
+            return names
 
         with open(structure_json_path, encoding='utf-8') as f:
             structure = json.load(f)
 
         for entry in structure.values():
-            scip_name = entry.get('scip-name')
-            if scip_name:
-                scip_names.add(scip_name)
+            name = entry.get(name_field)
+            if name:
+                names.add(name)
 
     elif structure_form == "files":
         if not structure_root.exists():
             print(f"Warning: {structure_root} not found")
-            return scip_names
+            return names
 
         for md_file in structure_root.rglob("*.md"):
             post = frontmatter.load(md_file)
-            scip_name = post.get('scip-name')
-            if scip_name:
-                scip_names.add(scip_name)
+            name = post.get(name_field)
+            if name:
+                names.add(name)
 
-    return scip_names
+    return names
 
 
 def create_cert(certs_dir: Path, func_id: str) -> Path:
@@ -241,12 +285,13 @@ def create_cert(certs_dir: Path, func_id: str) -> Path:
     return cert_path
 
 
-def display_menu(functions: list[tuple[str, dict]]) -> list[int]:
+def display_menu(functions: list[tuple[str, dict]], structure_type: str) -> list[int]:
     """
     Display a multiple choice menu and get user selections.
 
     Args:
         functions: List of (func_id, func_info) tuples to display.
+        structure_type: Either "dalek-lite" or "blueprint".
 
     Returns:
         List of selected indices (0-based).
@@ -255,22 +300,32 @@ def display_menu(functions: list[tuple[str, dict]]) -> list[int]:
     print("Functions with specs but no certification:")
     print("=" * 60 + "\n")
 
-    for i, (_scip_name, func_info) in enumerate(functions, 1):
-        has_requires = func_info.get('has_requires', False)
-        has_ensures = func_info.get('has_ensures', False)
+    for i, (name, func_info) in enumerate(functions, 1):
+        if structure_type == "blueprint":
+            # Blueprint: show veri-name, kind, and type-status
+            kind = func_info.get('kind', '?')
+            type_status = func_info.get('type-status', '?')
+            # Extract node_id from veri-name (remove "veri:" prefix)
+            node_id = name[5:] if name.startswith("veri:") else name
+            print(f"  [{i}] {node_id}")
+            print(f"      Kind: {kind}, Status: {type_status}")
+        else:
+            # Dalek-lite: show function name, file, line, and spec types
+            has_requires = func_info.get('has_requires', False)
+            has_ensures = func_info.get('has_ensures', False)
 
-        spec_types = []
-        if has_requires:
-            spec_types.append("requires")
-        if has_ensures:
-            spec_types.append("ensures")
+            spec_types = []
+            if has_requires:
+                spec_types.append("requires")
+            if has_ensures:
+                spec_types.append("ensures")
 
-        spec_str = ", ".join(spec_types)
-        func_name = func_info.get('name', '?')
-        file_path = func_info.get('file', '?')
-        start_line = func_info.get('start_line', '?')
-        print(f"  [{i}] {func_name} ({file_path}:{start_line})")
-        print(f"      Specs: {spec_str}")
+            spec_str = ", ".join(spec_types)
+            func_name = func_info.get('name', '?')
+            file_path = func_info.get('file', '?')
+            start_line = func_info.get('start_line', '?')
+            print(f"  [{i}] {func_name} ({file_path}:{start_line})")
+            print(f"      Specs: {spec_str}")
         print()
 
     print("=" * 60)
@@ -346,7 +401,7 @@ def main() -> None:
     """
     Check specification status and manage specification certs.
 
-    Steps:
+    For dalek-lite:
         1. Read config to get structure form and root
         2. Run scip-atoms specify to get spec data
         3. Filter to functions with specs (has_requires or has_ensures)
@@ -354,6 +409,13 @@ def main() -> None:
         5. Compare with existing certs
         6. Show user uncertified functions and let them choose which to certify
         7. Create cert files for selected functions
+
+    For blueprint:
+        1. Read config and blueprint.json
+        2. Get functions with specs (type-status: stated or mathlib)
+        3. Compare with existing certs
+        4. Show user uncertified functions and let them choose which to certify
+        5. Create cert files for selected functions
     """
     args = parse_args()
 
@@ -361,8 +423,6 @@ def main() -> None:
     project_root = args.project_root.resolve()
     verilib_path = project_root / ".verilib"
     certs_dir = verilib_path / "certs" / "specify"
-    specs_path = verilib_path / "specs.json"
-    atoms_path = verilib_path / "atoms.json"
     config_path = verilib_path / "config.json"
     structure_json_path = verilib_path / "structure_files.json"
 
@@ -374,6 +434,7 @@ def main() -> None:
     with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
+    structure_type = config.get("structure-type")
     structure_form = config.get("structure-form")
     if structure_form not in ("json", "files"):
         print(f"Error: Unknown form '{structure_form}'", file=sys.stderr)
@@ -382,26 +443,49 @@ def main() -> None:
     structure_root_relative = config.get("structure-root", ".verilib")
     structure_root = project_root / structure_root_relative
 
-    # Run scip-atoms specify
-    specs_data = run_scip_specify(project_root, specs_path, atoms_path)
+    if structure_type == "blueprint":
+        # Blueprint type: get specs from blueprint.json based on type-status
+        blueprint_path = verilib_path / "blueprint.json"
+        functions_with_specs = get_blueprint_functions_with_specs(blueprint_path)
+        print(f"\nFound {len(functions_with_specs)} functions with specs in blueprint")
 
-    # Get functions with specs
-    functions_with_specs = get_functions_with_specs(specs_data)
-    print(f"\nFound {len(functions_with_specs)} functions with specs in codebase")
+        # Get veri-names from structure
+        structure_names = get_structure_names(
+            structure_type, structure_form, structure_root, structure_json_path
+        )
+        print(f"Found {len(structure_names)} functions in structure")
 
-    # Get scip-names from structure
-    structure_scip_names = get_structure_scip_names(
-        structure_form, structure_root, structure_json_path
-    )
-    print(f"Found {len(structure_scip_names)} functions in structure")
+        # Filter to only functions in structure
+        functions_in_structure = {
+            veri_name: spec_info
+            for veri_name, spec_info in functions_with_specs.items()
+            if veri_name in structure_names
+        }
+        print(f"Found {len(functions_in_structure)} functions with specs in structure")
 
-    # Filter to only functions in structure
-    functions_in_structure = {
-        scip_name: spec_info
-        for scip_name, spec_info in functions_with_specs.items()
-        if scip_name in structure_scip_names
-    }
-    print(f"Found {len(functions_in_structure)} functions with specs in structure")
+    else:
+        # Dalek-lite type: run scip-atoms specify
+        specs_path = verilib_path / "specs.json"
+        atoms_path = verilib_path / "atoms.json"
+        specs_data = run_scip_specify(project_root, specs_path, atoms_path)
+
+        # Get functions with specs
+        functions_with_specs = get_functions_with_specs(specs_data)
+        print(f"\nFound {len(functions_with_specs)} functions with specs in codebase")
+
+        # Get scip-names from structure
+        structure_names = get_structure_names(
+            structure_type, structure_form, structure_root, structure_json_path
+        )
+        print(f"Found {len(structure_names)} functions in structure")
+
+        # Filter to only functions in structure
+        functions_in_structure = {
+            scip_name: spec_info
+            for scip_name, spec_info in functions_with_specs.items()
+            if scip_name in structure_names
+        }
+        print(f"Found {len(functions_in_structure)} functions with specs in structure")
 
     # Get existing certs
     existing_certs = get_existing_certs(certs_dir)
@@ -409,9 +493,9 @@ def main() -> None:
 
     # Find uncertified functions
     uncertified = {
-        scip_name: spec_info
-        for scip_name, spec_info in functions_in_structure.items()
-        if scip_name not in existing_certs
+        name: spec_info
+        for name, spec_info in functions_in_structure.items()
+        if name not in existing_certs
     }
 
     if not uncertified:
@@ -420,11 +504,11 @@ def main() -> None:
 
     print(f"\n{len(uncertified)} functions with specs need certification")
 
-    # Sort by scip-name for consistent display
+    # Sort by name for consistent display
     uncertified_list = sorted(uncertified.items(), key=lambda x: x[0])
 
     # Display menu and get selection
-    selected_indices = display_menu(uncertified_list)
+    selected_indices = display_menu(uncertified_list, structure_type)
 
     if not selected_indices:
         print("\nNo functions selected.")
@@ -434,8 +518,8 @@ def main() -> None:
     print(f"\nCreating certs for {len(selected_indices)} functions...")
 
     for idx in selected_indices:
-        scip_name, _ = uncertified_list[idx]
-        cert_path = create_cert(certs_dir, scip_name)
+        name, _ = uncertified_list[idx]
+        cert_path = create_cert(certs_dir, name)
         print(f"  Created: {cert_path.name}")
 
     print(f"\nDone. Created {len(selected_indices)} cert files in {certs_dir}")

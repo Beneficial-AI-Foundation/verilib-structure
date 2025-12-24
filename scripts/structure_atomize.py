@@ -8,13 +8,18 @@
 # ]
 # ///
 """
-Update verilib structure files by syncing with SCIP atoms.
+Update verilib structure files by syncing with atoms.
 
-This script:
-1. Runs scip-atoms to generate source code intelligence data
-2. Filters atoms by crate prefix (curve25519-dalek)
-3. Builds an interval tree index for line-based lookups
-4. Syncs structure files or JSON with SCIP atom data
+For dalek-lite type:
+    1. Runs scip-atoms to generate source code intelligence data
+    2. Filters atoms by crate prefix (curve25519-dalek)
+    3. Builds an interval tree index for line-based lookups
+    4. Syncs structure files or JSON with SCIP atom data
+
+For blueprint type:
+    1. Reads blueprint.json for dependencies and content
+    2. Generates metadata with dependencies (veri-names) and visible=true
+    3. For files form, creates .atom.verilib with content from blueprint.json
 
 Usage:
     uv run scripts/structure_atomize.py [project_root]
@@ -529,6 +534,136 @@ def populate_structure_json_metadata(
     return result
 
 
+def populate_blueprint_json_metadata(
+    structure: dict[str, dict],
+    blueprint_data: dict[str, dict],
+) -> dict[str, dict]:
+    """
+    Generate metadata dictionary from blueprint structure JSON.
+
+    For each entry in structure with a valid veri-name, creates a metadata dict
+    with dependencies (as veri-names) and visible=true.
+
+    Args:
+        structure: Dictionary mapping file_path to metadata dict with veri-name.
+        blueprint_data: Dictionary mapping node_id to blueprint node data.
+
+    Returns:
+        Dictionary mapping veri-name to metadata dict with:
+            - dependencies: List of veri-names this node depends on
+            - visible: Boolean flag (always True)
+    """
+    result = {}
+    created_count = 0
+    skipped_count = 0
+
+    for file_path, entry in structure.items():
+        veri_name = entry.get('veri-name')
+        if not veri_name:
+            print(f"WARNING: Missing veri-name for {file_path}")
+            skipped_count += 1
+            continue
+
+        # Extract node_id from veri-name (remove "veri:" prefix)
+        node_id = veri_name[5:] if veri_name.startswith("veri:") else veri_name
+
+        if node_id not in blueprint_data:
+            print(f"WARNING: Node '{node_id}' not found in blueprint.json for {file_path}")
+            skipped_count += 1
+            continue
+
+        node_info = blueprint_data[node_id]
+
+        # Get dependencies and convert to veri-names
+        type_deps = node_info.get('type-dependencies', [])
+        term_deps = node_info.get('term-dependencies', [])
+        all_deps = [f"veri:{dep}" for dep in type_deps + term_deps]
+
+        meta_data = {
+            "dependencies": all_deps,
+            "visible": True
+        }
+
+        result[veri_name] = meta_data
+        created_count += 1
+
+    print(f"Metadata entries created: {created_count}")
+    print(f"Skipped: {skipped_count}")
+
+    return result
+
+
+def populate_blueprint_files_metadata(
+    blueprint_data: dict[str, dict],
+    structure_root: Path,
+) -> None:
+    """
+    Generate metadata files for each blueprint structure .md file.
+
+    For each XXX.md file in structure_root, creates two companion files:
+
+    XXX.meta.verilib (JSON):
+        - veri-name: The veri identifier
+        - dependencies: List of veri-names this node depends on
+        - visible: Boolean flag (always True)
+
+    XXX.atom.verilib:
+        - Content from blueprint.json
+
+    Args:
+        blueprint_data: Dictionary mapping node_id to blueprint node data.
+        structure_root: Path to the structure directory containing .md files.
+    """
+    created_count = 0
+    skipped_count = 0
+
+    for md_file in structure_root.rglob("*.md"):
+        post = frontmatter.load(md_file)
+        veri_name = post.get('veri-name')
+
+        if not veri_name:
+            print(f"WARNING: Missing veri-name for {md_file}")
+            skipped_count += 1
+            continue
+
+        # Extract node_id from veri-name (remove "veri:" prefix)
+        node_id = veri_name[5:] if veri_name.startswith("veri:") else veri_name
+
+        if node_id not in blueprint_data:
+            print(f"WARNING: Node '{node_id}' not found in blueprint.json for {md_file}")
+            skipped_count += 1
+            continue
+
+        node_info = blueprint_data[node_id]
+
+        # Get dependencies and convert to veri-names
+        type_deps = node_info.get('type-dependencies', [])
+        term_deps = node_info.get('term-dependencies', [])
+        all_deps = [f"veri:{dep}" for dep in type_deps + term_deps]
+
+        meta_data = {
+            "veri-name": veri_name,
+            "dependencies": all_deps,
+            "visible": True
+        }
+
+        # Write XXX.meta.verilib
+        meta_file = md_file.with_suffix('.meta.verilib')
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(meta_data, f, indent=2)
+
+        # Write XXX.atom.verilib with content from blueprint.json
+        content = node_info.get('content', '')
+        atom_file = md_file.with_suffix('.atom.verilib')
+        with open(atom_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        created_count += 1
+
+    print(f"Metadata files created: {created_count}")
+    print(f"Skipped: {skipped_count}")
+
+
 def structure_to_tree(structure_root: Path) -> list[dict]:
     """
     Convert structure files to a JSON tree format.
@@ -709,14 +844,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     """
-    Update verilib structure by syncing with SCIP atoms.
+    Update verilib structure by syncing with atoms.
 
-    Steps:
+    For dalek-lite:
         1. Parse command line arguments
         2. Generate SCIP atoms from source code
         3. Filter to only curve25519-dalek atoms
         4. Build interval tree index for line lookups
         5. Sync structure (JSON or files) with SCIP data
+
+    For blueprint:
+        1. Parse command line arguments
+        2. Read blueprint.json for dependencies and content
+        3. Generate metadata with dependencies (veri-names) and visible=true
     """
     args = parse_args()
 
@@ -734,10 +874,6 @@ def main() -> None:
         config = json.load(f)
 
     structure_type = config.get("structure-type")
-    if structure_type != "dalek-lite":
-        print(f"Error: Unknown type '{structure_type}'", file=sys.stderr)
-        raise SystemExit(1)
-
     structure_form = config.get("structure-form")
     if structure_form not in ("json", "files"):
         print(f"Error: Unknown form '{structure_form}'", file=sys.stderr)
@@ -748,47 +884,86 @@ def main() -> None:
     structure_root = project_root / structure_root_relative
 
     # Compute paths
-    atoms_path = verilib_path / "atoms.json"
     structure_json_path = verilib_path / "structure_files.json"
     structure_meta_path = verilib_path / "structure_meta.json"
 
-    # Generate and sync SCIP atoms
-    scip_atoms = generate_scip_atoms(project_root, atoms_path)
-    scip_atoms = filter_scip_atoms(scip_atoms, SCIP_PREFIX)
-    scip_index = generate_scip_index(scip_atoms)
-
-    if structure_form == "json":
-        # Load structure_files.json, sync, and save
-        if not structure_json_path.exists():
-            print(f"Error: {structure_json_path} not found", file=sys.stderr)
+    if structure_type == "blueprint":
+        # Blueprint type: read blueprint.json for dependencies and content
+        blueprint_path = verilib_path / "blueprint.json"
+        if not blueprint_path.exists():
+            print(f"Error: {blueprint_path} not found. Run structure_create.py first.", file=sys.stderr)
             raise SystemExit(1)
 
-        print(f"Loading structure from {structure_json_path}...")
-        with open(structure_json_path, encoding='utf-8') as f:
-            structure = json.load(f)
+        print(f"Loading blueprint from {blueprint_path}...")
+        with open(blueprint_path, encoding='utf-8') as f:
+            blueprint_data = json.load(f)
 
-        print("Syncing structure with SCIP atoms...")
-        structure = sync_structure_json_with_atoms(structure, scip_index, scip_atoms)
+        if structure_form == "json":
+            # Load structure_files.json
+            if not structure_json_path.exists():
+                print(f"Error: {structure_json_path} not found", file=sys.stderr)
+                raise SystemExit(1)
 
-        print(f"Saving updated structure to {structure_json_path}...")
-        with open(structure_json_path, 'w', encoding='utf-8') as f:
-            json.dump(structure, f, indent=2)
+            print(f"Loading structure from {structure_json_path}...")
+            with open(structure_json_path, encoding='utf-8') as f:
+                structure = json.load(f)
 
-        print("Populating structure metadata...")
-        metadata = populate_structure_json_metadata(structure, scip_atoms)
+            print("Populating structure metadata from blueprint...")
+            metadata = populate_blueprint_json_metadata(structure, blueprint_data)
 
-        print(f"Saving metadata to {structure_meta_path}...")
-        with open(structure_meta_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2)
-        print("Done.")
+            print(f"Saving metadata to {structure_meta_path}...")
+            with open(structure_meta_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2)
+            print("Done.")
 
-    elif structure_form == "files":
-        print(f"Syncing structure files in {structure_root} with SCIP atoms...")
-        sync_structure_files_with_atoms(scip_index, scip_atoms, structure_root)
+        elif structure_form == "files":
+            print(f"Populating blueprint metadata files in {structure_root}...")
+            populate_blueprint_files_metadata(blueprint_data, structure_root)
+            print("Done.")
 
-        print("Populating structure metadata files...")
-        populate_structure_files_metadata(scip_atoms, structure_root, project_root)
-        print("Done.")
+    elif structure_type == "dalek-lite":
+        # Dalek-lite type: generate and sync SCIP atoms
+        atoms_path = verilib_path / "atoms.json"
+        scip_atoms = generate_scip_atoms(project_root, atoms_path)
+        scip_atoms = filter_scip_atoms(scip_atoms, SCIP_PREFIX)
+        scip_index = generate_scip_index(scip_atoms)
+
+        if structure_form == "json":
+            # Load structure_files.json, sync, and save
+            if not structure_json_path.exists():
+                print(f"Error: {structure_json_path} not found", file=sys.stderr)
+                raise SystemExit(1)
+
+            print(f"Loading structure from {structure_json_path}...")
+            with open(structure_json_path, encoding='utf-8') as f:
+                structure = json.load(f)
+
+            print("Syncing structure with SCIP atoms...")
+            structure = sync_structure_json_with_atoms(structure, scip_index, scip_atoms)
+
+            print(f"Saving updated structure to {structure_json_path}...")
+            with open(structure_json_path, 'w', encoding='utf-8') as f:
+                json.dump(structure, f, indent=2)
+
+            print("Populating structure metadata...")
+            metadata = populate_structure_json_metadata(structure, scip_atoms)
+
+            print(f"Saving metadata to {structure_meta_path}...")
+            with open(structure_meta_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2)
+            print("Done.")
+
+        elif structure_form == "files":
+            print(f"Syncing structure files in {structure_root} with SCIP atoms...")
+            sync_structure_files_with_atoms(scip_index, scip_atoms, structure_root)
+
+            print("Populating structure metadata files...")
+            populate_structure_files_metadata(scip_atoms, structure_root, project_root)
+            print("Done.")
+
+    else:
+        print(f"Error: Unknown structure type '{structure_type}'", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
