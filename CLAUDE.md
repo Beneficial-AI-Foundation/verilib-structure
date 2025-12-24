@@ -22,23 +22,30 @@ Scripts are self-contained with PEP 723 inline metadata (dependencies declared i
 
 ## Architecture
 
+### Structure Types
+
+| Type | Identifier | Source | Use Case |
+|------|------------|--------|----------|
+| `dalek-lite` | `scip-name` | Verus/Rust code | Verus verification projects |
+| `blueprint` | `veri-name` | Lean blueprint | Lean formalization projects |
+
 ### Pipeline Flow
 
 1. **structure_create.py** - Generates initial structure from source analysis
-   - `dalek-lite` type: Parses `functions_to_track.csv` via `analyze_verus_specs_proofs.py`
-   - `blueprint` type: Runs `leanblueprint web` and parses dependency graph HTML
+   - `dalek-lite`: Calls `<project>/scripts/analyze_verus_specs_proofs.py` CLI
+   - `blueprint`: Runs `leanblueprint web`, parses HTML, saves to `blueprint.json`
 
-2. **structure_atomize.py** - Enriches structure with SCIP data
-   - Runs external `scip-atoms` tool
-   - Populates `scip-name` identifiers and metadata
+2. **structure_atomize.py** - Enriches structure with metadata
+   - `dalek-lite`: Runs `scip-atoms`, populates `scip-name` and code metadata
+   - `blueprint`: Reads `blueprint.json`, generates metadata with `veri-name` and dependencies
 
 3. **structure_specify.py** - Manages specification certs
-   - Runs `scip-atoms specify` to find functions with requires/ensures
-   - Interactive cert creation for validated specifications
+   - `dalek-lite`: Runs `scip-atoms specify` (has_requires/has_ensures)
+   - `blueprint`: Checks `type-status` in `blueprint.json` (stated/mathlib = has spec)
 
 4. **structure_verify.py** - Manages verification certs
-   - Runs `scip-atoms verify` to check proof status
-   - Automatically creates/deletes certs based on verification results
+   - `dalek-lite`: Runs `scip-atoms verify`
+   - `blueprint`: Checks `term-status` in `blueprint.json` (fully-proved = verified)
 
 ### Data Storage
 
@@ -47,16 +54,18 @@ All data lives in `.verilib/` within the target project:
 - `structure_files.json` - Structure data (when form=json)
 - `structure_meta.json` - Metadata from atomization
 - `blueprint.json` - Blueprint dependency graph (blueprint type only)
+- `tracked_functions.csv` - Tracked functions (dalek-lite type only)
 - `certs/specify/` - Specification certificates
 - `certs/verify/` - Verification certificates
 
 ### Structure Forms
 
-- **json**: Single `structure_files.json` file
+- **json**: Single `structure_files.json` file (default for blueprint)
 - **files**: Hierarchy of `.md` files with YAML frontmatter, plus `.meta.verilib` and `.atom.verilib` companions
 
 ### External Dependencies
 
-- `scip-atoms` (Rust CLI) - Source code intelligence and verification
-- `leanblueprint` (Python) - Blueprint generation for Lean projects
+- `scip-atoms` (Rust CLI) - Source code intelligence and verification (dalek-lite only)
+- `leanblueprint` (Python) - Blueprint generation for Lean projects (blueprint only)
+- `graphviz` (system) - Required for leanblueprint
 - Verus/Verus Analyzer - For dalek-lite verification
