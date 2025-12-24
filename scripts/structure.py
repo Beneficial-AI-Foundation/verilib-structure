@@ -1563,7 +1563,7 @@ def run_scip_specify(project_root: Path, specs_path: Path, atoms_path: Path) -> 
 
     Args:
         project_root: Root directory of the project to analyze.
-        specs_path: Path where specs.json will be written.
+        specs_path: Path where specification.json will be written.
         atoms_path: Path to atoms.json for scip-name lookup.
 
     Returns:
@@ -1774,7 +1774,7 @@ def cmd_specify(args: argparse.Namespace) -> None:
         print(f"Found {len(functions_in_structure)} functions with specs in structure")
 
     else:
-        specs_path = verilib_path / "specs.json"
+        specs_path = verilib_path / "specification.json"
         atoms_path = verilib_path / "atoms.json"
         specs_data = run_scip_specify(project_root, specs_path, atoms_path)
 
