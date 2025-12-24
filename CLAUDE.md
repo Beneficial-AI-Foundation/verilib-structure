@@ -11,8 +11,8 @@ Verilib-structure is a toolkit for managing formal verification workflows. It tr
 All scripts use inline dependencies via `uv run`:
 
 ```bash
-uv run scripts/structure_create.py --type dalek-lite --form json
-uv run scripts/structure_create.py --type blueprint --form files
+uv run scripts/structure_create.py --type dalek-lite --form files
+uv run scripts/structure_create.py --type blueprint
 uv run scripts/structure_atomize.py
 uv run scripts/structure_specify.py
 uv run scripts/structure_verify.py

@@ -39,7 +39,7 @@ Generates structure files from tracked functions. Analyzes source code to identi
 **Usage:**
 
 ```bash
-uv run scripts/structure_create.py [project_root] --type <type> --form <form> [--root <root>]
+uv run scripts/structure_create.py [project_root] --type <type> [--form <form>] [--root <root>]
 ```
 
 **Arguments:**
@@ -52,8 +52,8 @@ uv run scripts/structure_create.py [project_root] --type <type> --form <form> [-
 
 | Option | Values | Description |
 |--------|--------|-------------|
-| `--type` | `dalek-lite` | Type of the source to analyze (required) |
-| `--form` | `json`, `files` | Structure form (required) |
+| `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
+| `--form` | `json`, `files` | Structure form (default: `json`) |
 | `--root` | path | Root directory for structure files, relative to project root (default: `.verilib`) |
 
 **Structure forms:**
@@ -305,13 +305,13 @@ Total certs: 10 → 13
    uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
    ```
 
-### Dalek-Lite
+### Blueprint (Equational Theories)
 
 1. Create structure files
    ```
    git clone git@github.com:Beneficial-AI-Foundation/equational_theories.git
    cd equational_theories
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_create.py --type blueprint --form json
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_create.py --type blueprint
    ```
 
 2. Run atomization checks

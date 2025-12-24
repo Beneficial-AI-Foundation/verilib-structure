@@ -21,7 +21,7 @@ For blueprint type:
 Usage:
     uv run scripts/structure_create.py --type dalek-lite --form files --root .verilib
     uv run scripts/structure_create.py --type dalek-lite --form json
-    uv run scripts/structure_create.py --type blueprint --form json
+    uv run scripts/structure_create.py --type blueprint
     uv run scripts/structure_create.py --type blueprint --form files
 """
 
@@ -691,7 +691,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--form",
         choices=["json", "files"],
-        required=True,
+        default="json",
         help="Structure form: 'json' writes to structure_files.json, 'files' creates .md file hierarchy"
     )
     parser.add_argument(
