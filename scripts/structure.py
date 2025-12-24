@@ -1883,6 +1883,16 @@ def run_scip_verify(
 
     print(f"Verification results saved to {verification_path}")
 
+    # Clean up generated intermediate files
+    for cleanup_file in ["data/verification_config.json", "data/verification_output.txt"]:
+        cleanup_path = project_root / cleanup_file
+        if cleanup_path.exists():
+            cleanup_path.unlink()
+
+    data_dir = project_root / "data"
+    if data_dir.exists() and data_dir.is_dir() and not any(data_dir.iterdir()):
+        data_dir.rmdir()
+
     with open(verification_path, encoding='utf-8') as f:
         return json.load(f)
 
