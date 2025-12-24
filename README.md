@@ -30,9 +30,22 @@ Verilib structure files for outlining verification goals
    export VERILIB_STRUCTURE_PATH=$(pwd)/verilib-structure
    ```
 
-## Scripts
+## Usage
 
-### structure_create.py
+The main script `structure.py` provides four subcommands:
+
+```bash
+uv run scripts/structure.py <command> [options]
+```
+
+| Command | Description |
+|---------|-------------|
+| `create` | Initialize structure files from source analysis |
+| `atomize` | Enrich structure files with metadata |
+| `specify` | Check specification status and manage spec certs |
+| `verify` | Run verification and manage verification certs |
+
+### create
 
 Generates structure files from source analysis. Supports two structure types:
 
@@ -42,7 +55,7 @@ Generates structure files from source analysis. Supports two structure types:
 **Usage:**
 
 ```bash
-uv run scripts/structure_create.py [project_root] --type <type> [--form <form>] [--root <root>]
+uv run scripts/structure.py create [project_root] --type <type> [--form <form>] [--root <root>]
 ```
 
 **Arguments:**
@@ -79,16 +92,16 @@ Creates `<project_root>/.verilib/config.json` with:
 
 ```bash
 # Dalek-lite: Generate JSON structure file
-uv run scripts/structure_create.py --type dalek-lite --form json
+uv run scripts/structure.py create --type dalek-lite --form json
 
 # Dalek-lite: Generate .md file hierarchy
-uv run scripts/structure_create.py --type dalek-lite --form files
+uv run scripts/structure.py create --type dalek-lite --form files
 
 # Blueprint: Generate JSON structure file (default)
-uv run scripts/structure_create.py --type blueprint
+uv run scripts/structure.py create --type blueprint
 
 # Blueprint: Generate .md file hierarchy
-uv run scripts/structure_create.py --type blueprint --form files
+uv run scripts/structure.py create --type blueprint --form files
 ```
 
 **Generated file format (dalek-lite):**
@@ -111,19 +124,19 @@ dependencies: [veri:dep1, veri:dep2]
 <content from blueprint>
 ```
 
-### structure_atomize.py
+### atomize
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
 - **dalek-lite**: Runs `scip-atoms` to generate SCIP data, syncs structure with `scip-name` identifiers
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
-**Note:** Requires `config.json` created by `structure_create.py`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
+**Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
 
 **Usage:**
 
 ```bash
-uv run scripts/structure_atomize.py [project_root]
+uv run scripts/structure.py atomize [project_root]
 ```
 
 **Arguments:**
@@ -141,10 +154,10 @@ uv run scripts/structure_atomize.py [project_root]
 
 ```bash
 # Update structure and generate metadata (current directory)
-uv run scripts/structure_atomize.py
+uv run scripts/structure.py atomize
 
 # Update structure for a specific project
-uv run scripts/structure_atomize.py /path/to/project
+uv run scripts/structure.py atomize /path/to/project
 ```
 
 **Generated metadata format (dalek-lite):**
@@ -182,7 +195,7 @@ For each `XXX.md` file, creates:
 - `XXX.meta.verilib`: JSON metadata
 - `XXX.atom.verilib`: Source code (dalek-lite) or content from blueprint.json (blueprint)
 
-### structure_specify.py
+### specify
 
 Checks specification status and manages specification certs. Behavior depends on structure type:
 
@@ -192,7 +205,7 @@ Checks specification status and manages specification certs. Behavior depends on
 **Usage:**
 
 ```bash
-uv run scripts/structure_specify.py [project_root]
+uv run scripts/structure.py specify [project_root]
 ```
 
 **Arguments:**
@@ -227,10 +240,10 @@ Certs are stored in `.verilib/certs/specify/` with one JSON file per certified f
 
 ```bash
 # Check and certify specs (current directory)
-uv run scripts/structure_specify.py
+uv run scripts/structure.py specify
 
 # Check and certify specs for a specific project
-uv run scripts/structure_specify.py /path/to/project
+uv run scripts/structure.py specify /path/to/project
 ```
 
 **Interactive selection:**
@@ -241,7 +254,7 @@ When prompted, you can enter:
 - `all` to select all uncertified functions
 - `none` or empty to skip
 
-### structure_verify.py
+### verify
 
 Runs verification and automatically manages verification certs. Behavior depends on structure type:
 
@@ -251,7 +264,7 @@ Runs verification and automatically manages verification certs. Behavior depends
 **Usage:**
 
 ```bash
-uv run scripts/structure_verify.py [project_root] [--verify-only-module <module>]
+uv run scripts/structure.py verify [project_root] [--verify-only-module <module>]
 ```
 
 **Arguments:**
@@ -294,13 +307,13 @@ Certs are stored in `.verilib/certs/verify/` with one JSON file per verified fun
 
 ```bash
 # Run verification and update certs (current directory)
-uv run scripts/structure_verify.py
+uv run scripts/structure.py verify
 
 # Run verification for a specific project
-uv run scripts/structure_verify.py /path/to/project
+uv run scripts/structure.py verify /path/to/project
 
 # Run verification for only the edwards module (dalek-lite only)
-uv run scripts/structure_verify.py --verify-only-module edwards
+uv run scripts/structure.py verify --verify-only-module edwards
 ```
 
 **Output:**
@@ -336,22 +349,22 @@ Total certs: 10 → 13
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_create.py --type dalek-lite --form files
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type dalek-lite --form files
    ```
 
 2. Run atomization checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_atomize.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py atomize
    ```
 
 3. Run specification checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_specify.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py specify
    ```
 
 4. Run verification checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py verify
    ```
 
 ### Blueprint (Equational Theories)
@@ -360,20 +373,20 @@ Total certs: 10 → 13
    ```
    git clone git@github.com:Beneficial-AI-Foundation/equational_theories.git
    cd equational_theories
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_create.py --type blueprint
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type blueprint
    ```
 
 2. Run atomization checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_atomize.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py atomize
    ```
 
 3. Run specification checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_specify.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py specify
    ```
 
 4. Run verification checks
    ```
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py verify
    ```

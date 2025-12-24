@@ -8,17 +8,17 @@ Verilib-structure is a toolkit for managing formal verification workflows. It tr
 
 ## Running Scripts
 
-All scripts use inline dependencies via `uv run`:
+The main script `structure.py` provides four subcommands:
 
 ```bash
-uv run scripts/structure_create.py --type dalek-lite --form files
-uv run scripts/structure_create.py --type blueprint
-uv run scripts/structure_atomize.py
-uv run scripts/structure_specify.py
-uv run scripts/structure_verify.py
+uv run scripts/structure.py create --type dalek-lite --form files
+uv run scripts/structure.py create --type blueprint
+uv run scripts/structure.py atomize [project_root]
+uv run scripts/structure.py specify [project_root]
+uv run scripts/structure.py verify [project_root] [--verify-only-module <module>]
 ```
 
-Scripts are self-contained with PEP 723 inline metadata (dependencies declared in script headers).
+The script is self-contained with PEP 723 inline metadata (dependencies declared in script header).
 
 ## Architecture
 
@@ -31,19 +31,19 @@ Scripts are self-contained with PEP 723 inline metadata (dependencies declared i
 
 ### Pipeline Flow
 
-1. **structure_create.py** - Generates initial structure from source analysis
+1. **create** - Generates initial structure from source analysis
    - `dalek-lite`: Calls `<project>/scripts/analyze_verus_specs_proofs.py` CLI
    - `blueprint`: Runs `leanblueprint web`, parses HTML, saves to `blueprint.json`
 
-2. **structure_atomize.py** - Enriches structure with metadata
+2. **atomize** - Enriches structure with metadata
    - `dalek-lite`: Runs `scip-atoms`, populates `scip-name` and code metadata
    - `blueprint`: Reads `blueprint.json`, generates metadata with `veri-name` and dependencies
 
-3. **structure_specify.py** - Manages specification certs
+3. **specify** - Manages specification certs
    - `dalek-lite`: Runs `scip-atoms specify` (has_requires/has_ensures)
    - `blueprint`: Checks `type-status` in `blueprint.json` (stated/mathlib = has spec)
 
-4. **structure_verify.py** - Manages verification certs
+4. **verify** - Manages verification certs
    - `dalek-lite`: Runs `scip-atoms verify`
    - `blueprint`: Checks `term-status` in `blueprint.json` (fully-proved = verified)
 
