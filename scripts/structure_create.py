@@ -16,7 +16,7 @@ For dalek-lite type:
 
 For blueprint type:
     Runs leanblueprint web to generate dependency graph, then creates structure files
-    with scip-name (scip:<blueprint-id>) and content fields.
+    with veri-name (veri:<blueprint-id>) and content fields.
 
 Usage:
     uv run scripts/structure_create.py --type dalek-lite --form files --root .verilib
@@ -347,14 +347,20 @@ def blueprint_to_structure(blueprint_data: dict[str, dict[str, Any]]) -> dict[st
 
     Returns:
         Dictionary mapping file_path (str) to dict with keys:
-            - scip-name: "scip:<blueprint-id>"
+            - veri-name: "veri:<blueprint-id>"
+            - dependencies: List of veri-names (from type-dependencies and term-dependencies)
             - content: Content from blueprint data
     """
     result = {}
     for blueprint_id, attributes in blueprint_data.items():
         file_path = f"{blueprint_id}.md"
+        # Combine type-dependencies and term-dependencies into a single list
+        type_deps = attributes.get("type-dependencies", [])
+        term_deps = attributes.get("term-dependencies", [])
+        all_deps = [f"veri:{dep}" for dep in type_deps + term_deps]
         result[file_path] = {
-            "scip-name": f"scip:{blueprint_id}",
+            "veri-name": f"veri:{blueprint_id}",
+            "dependencies": all_deps,
             "content": attributes.get("content", ""),
         }
     return result
