@@ -193,6 +193,79 @@ When prompted, you can enter:
 - `all` to select all uncertified functions
 - `none` or empty to skip
 
+### structure_verify.py
+
+Runs verification and automatically manages verification certs. Creates certs for newly verified functions and deletes certs for functions that now fail verification.
+
+**Usage:**
+
+```bash
+uv run scripts/structure_verify.py [project_root] [--verify-only-module <module>]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `project_root` | Project root directory (default: current working directory) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--verify-only-module` | Only verify functions in this module (e.g., `edwards`) |
+
+**Workflow:**
+
+1. Runs `scip-atoms verify` to check which functions pass verification
+2. Filters to only functions in the structure
+3. Compares with existing certs in `.verilib/certs/verify/`
+4. Creates new certs for verified functions without certs
+5. Deletes certs for failed functions with existing certs
+6. Shows summary of all changes
+
+**Cert files:**
+
+Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
+- Filename: URL-encoded scip-name + `.json`
+- Content: `{"timestamp": "<ISO 8601 timestamp>"}`
+
+**Examples:**
+
+```bash
+# Run verification and update certs (current directory)
+uv run scripts/structure_verify.py
+
+# Run verification for a specific project
+uv run scripts/structure_verify.py /path/to/project
+
+# Run verification for only the edwards module
+uv run scripts/structure_verify.py --verify-only-module edwards
+```
+
+**Output:**
+
+The script shows a summary of changes:
+```
+============================================================
+VERIFICATION CERT CHANGES
+============================================================
+
+✓ Created 5 new certs:
+  + func_name
+    scip:crate/version/module#func()
+
+✗ Deleted 2 certs (verification failed):
+  - other_func
+    scip:crate/version/module#other_func()
+
+============================================================
+Total certs: 10 → 13
+  Created: +5
+  Deleted: -2
+============================================================
+```
+
 ## Case Studies
 
 
@@ -216,12 +289,9 @@ When prompted, you can enter:
 2. Run specification checks
    ```
    uv run $VERILIB_STRUCTURE_PATH/scripts/structure_specify.py
-   scip-atoms specify curve25519-dalek --json-output .verilib/specs.json --with-scip-names .verilib/atoms.json
    ```
 
 3. Run verification checks
    ```
-   scip-atoms verify curve25519-dalek --json-output .verilib/verification.json 
-   scip-atoms verify curve25519-dalek --json-output .verilib/verification.json --with-scip-names .verilib/atoms.json
-   scip-atoms verify curve25519-dalek --json-output .verilib/verification.json --verify-only-module edwards 
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure_verify.py
    ```
