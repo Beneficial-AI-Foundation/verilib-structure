@@ -185,7 +185,7 @@ verilib-structure atomize [PROJECT_ROOT]
 
 **Structure forms (from config):**
 
-- `json`: Generates `<project_root>/.verilib/structure_meta.json` with metadata
+- `json`: Enriches `<project_root>/.verilib/stubs.json` with atom metadata
 - `files`: Generates companion `.meta.verilib` and `.atom.verilib` files
 
 **Examples:**
@@ -198,24 +198,24 @@ verilib-structure atomize
 verilib-structure atomize /path/to/project
 ```
 
-**Generated metadata format (dalek-lite):**
-
-The `structure_meta.json` file maps probe-name to metadata:
+**Enriched stubs.json format (dalek-lite, json):**
 
 ```json
 {
-  "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()": {
+  "path/to/function_name.md": {
     "code-path": "curve25519-dalek/src/montgomery.rs",
     "code-lines": { "start": 42, "end": 50 },
+    "code-name": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()",
     "code-module": "montgomery",
-    "dependencies": ["probe:..."],
-    "specified": false,
-    "visible": true
+    "dependencies": ["probe:dep1", "probe:dep2"],
+    "display-name": "ct_eq"
   }
 }
 ```
 
-**Generated metadata format (blueprint):**
+**Generated metadata format (blueprint, json):**
+
+The `structure_meta.json` file maps veri-name to metadata:
 
 ```json
 {

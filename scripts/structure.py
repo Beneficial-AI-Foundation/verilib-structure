@@ -1153,11 +1153,14 @@ def sync_structure_json_with_atoms(
     return result
 
 
-def _generate_metadata_from_atom(
+def _generate_enriched_entry(
     probe_name: str,
     probe_atoms: dict[str, dict],
 ) -> tuple[dict | None, str | None]:
-    """Generate metadata dict from probe atom data."""
+    """Generate enriched entry from probe atom data.
+
+    Returns a dict with code-path, code-lines, code-name, code-module, dependencies, display-name.
+    """
     if not probe_name or probe_name not in probe_atoms:
         return None, "Missing or invalid code-name"
 
@@ -1172,20 +1175,21 @@ def _generate_metadata_from_atom(
         return None, "Missing code-path or line info"
 
     code_module = atom.get('code-module', '')
+    display_name = atom.get('display-name', '')
 
-    meta_data = {
+    enriched_entry = {
         "code-path": code_path,
         "code-lines": {
             "start": lines_start,
             "end": lines_end
         },
+        "code-name": probe_name,
         "code-module": code_module,
         "dependencies": dependencies,
-        "specified": False,
-        "visible": True
+        "display-name": display_name,
     }
 
-    return meta_data, None
+    return enriched_entry, None
 
 
 def populate_structure_files_metadata(
@@ -1201,22 +1205,20 @@ def populate_structure_files_metadata(
         post = frontmatter.load(md_file)
         probe_name = post.get('code-name')
 
-        meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
+        enriched_entry, error = _generate_enriched_entry(probe_name, probe_atoms)
 
         if error:
             print(f"WARNING: {error} for {md_file}")
             skipped_count += 1
             continue
 
-        meta_data["code-name"] = probe_name
-
         meta_file = md_file.with_suffix('.meta.verilib')
         with open(meta_file, 'w', encoding='utf-8') as f:
-            json.dump(meta_data, f, indent=2)
+            json.dump(enriched_entry, f, indent=2)
 
-        code_path = meta_data["code-path"]
-        lines_start = meta_data["code-lines"]["start"]
-        lines_end = meta_data["code-lines"]["end"]
+        code_path = enriched_entry["code-path"]
+        lines_start = enriched_entry["code-lines"]["start"]
+        lines_end = enriched_entry["code-lines"]["end"]
 
         source_file = project_root / code_path
         if not source_file.exists():
@@ -1240,29 +1242,35 @@ def populate_structure_files_metadata(
     print(f"Skipped: {skipped_count}")
 
 
-def populate_structure_json_metadata(
+def enrich_structure_json(
     structure: dict[str, dict],
     probe_atoms: dict[str, dict],
 ) -> dict[str, dict]:
-    """Generate metadata dictionary from structure JSON."""
+    """Enrich structure JSON with atom metadata.
+
+    Keys are file paths, values are enriched entries with code-path, code-lines,
+    code-name, code-module, dependencies, display-name.
+    """
     result = {}
-    created_count = 0
+    enriched_count = 0
     skipped_count = 0
 
     for file_path, entry in structure.items():
         probe_name = entry.get('code-name')
 
-        meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
+        enriched_entry, error = _generate_enriched_entry(probe_name, probe_atoms)
 
         if error:
             print(f"WARNING: {error} for {file_path}")
             skipped_count += 1
+            # Keep original entry if enrichment fails
+            result[file_path] = entry
             continue
 
-        result[probe_name] = meta_data
-        created_count += 1
+        result[file_path] = enriched_entry
+        enriched_count += 1
 
-    print(f"Metadata entries created: {created_count}")
+    print(f"Entries enriched: {enriched_count}")
     print(f"Skipped: {skipped_count}")
 
     return result
@@ -1540,16 +1548,12 @@ def cmd_atomize(args: argparse.Namespace) -> None:
             print("Syncing structure with probe atoms...")
             structure = sync_structure_json_with_atoms(structure, probe_index, probe_atoms)
 
-            print(f"Saving updated structure to {structure_json_path}...")
+            print("Enriching structure with atom metadata...")
+            enriched = enrich_structure_json(structure, probe_atoms)
+
+            print(f"Saving enriched structure to {structure_json_path}...")
             with open(structure_json_path, 'w', encoding='utf-8') as f:
-                json.dump(structure, f, indent=2)
-
-            print("Populating structure metadata...")
-            metadata = populate_structure_json_metadata(structure, probe_atoms)
-
-            print(f"Saving metadata to {structure_meta_path}...")
-            with open(structure_meta_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2)
+                json.dump(enriched, f, indent=2)
             print("Done.")
 
         elif structure_form == "files":

@@ -261,16 +261,12 @@ fn run_dalek_atomize(
             println!("Syncing structure with probe atoms...");
             let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
 
-            println!("Saving updated structure to {}...", config.structure_json_path.display());
-            let content = serde_json::to_string_pretty(&structure)?;
+            println!("Enriching structure with atom metadata...");
+            let enriched = enrich_structure_json(&structure, &probe_atoms)?;
+
+            println!("Saving enriched structure to {}...", config.structure_json_path.display());
+            let content = serde_json::to_string_pretty(&enriched)?;
             std::fs::write(&config.structure_json_path, content)?;
-
-            println!("Populating structure metadata...");
-            let metadata = populate_structure_json_metadata(&structure, &probe_atoms)?;
-
-            println!("Saving metadata to {}...", config.structure_meta_path.display());
-            let content = serde_json::to_string_pretty(&metadata)?;
-            std::fs::write(&config.structure_meta_path, content)?;
             println!("Done.");
         }
         StructureForm::Files => {
@@ -583,8 +579,9 @@ fn sync_structure_files_with_atoms(
     Ok(())
 }
 
-/// Generate metadata from probe atom data.
-fn generate_metadata_from_atom(
+/// Generate enriched entry from probe atom data.
+/// Returns a JSON object with code-path, code-lines, code-name, code-module, dependencies, display-name.
+fn generate_enriched_entry(
     probe_name: &str,
     probe_atoms: &HashMap<String, Value>,
 ) -> Result<Option<Value>> {
@@ -623,26 +620,32 @@ fn generate_metadata_from_atom(
         .cloned()
         .unwrap_or_else(|| json!([]));
 
+    let display_name = atom
+        .get("display-name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
     Ok(Some(json!({
         "code-path": code_path,
         "code-lines": {
             "start": lines_start,
             "end": lines_end,
         },
+        "code-name": probe_name,
         "code-module": code_module,
         "dependencies": dependencies,
-        "specified": false,
-        "visible": true,
+        "display-name": display_name,
     })))
 }
 
-/// Generate metadata dictionary from structure JSON.
-fn populate_structure_json_metadata(
+/// Enrich structure JSON with atom metadata.
+/// Keys are file paths, values are enriched entries with code-path, code-lines, code-name, code-module, dependencies, display-name.
+fn enrich_structure_json(
     structure: &HashMap<String, Value>,
     probe_atoms: &HashMap<String, Value>,
 ) -> Result<HashMap<String, Value>> {
     let mut result = HashMap::new();
-    let mut created_count = 0;
+    let mut enriched_count = 0;
     let mut skipped_count = 0;
 
     for (file_path, entry) in structure {
@@ -651,23 +654,27 @@ fn populate_structure_json_metadata(
             None => {
                 eprintln!("WARNING: Missing or invalid code-name for {}", file_path);
                 skipped_count += 1;
+                // Keep original entry if no code-name
+                result.insert(file_path.clone(), entry.clone());
                 continue;
             }
         };
 
-        match generate_metadata_from_atom(probe_name, probe_atoms)? {
-            Some(meta_data) => {
-                result.insert(probe_name.to_string(), meta_data);
-                created_count += 1;
+        match generate_enriched_entry(probe_name, probe_atoms)? {
+            Some(enriched_entry) => {
+                result.insert(file_path.clone(), enriched_entry);
+                enriched_count += 1;
             }
             None => {
-                eprintln!("WARNING: Missing code-path or line info for {}", file_path);
+                eprintln!("WARNING: Missing atom data for {} ({})", file_path, probe_name);
                 skipped_count += 1;
+                // Keep original entry if enrichment fails
+                result.insert(file_path.clone(), entry.clone());
             }
         }
     }
 
-    println!("Metadata entries created: {}", created_count);
+    println!("Entries enriched: {}", enriched_count);
     println!("Skipped: {}", skipped_count);
 
     Ok(result)
@@ -708,13 +715,8 @@ fn populate_structure_files_metadata(
             }
         };
 
-        let meta_data = match generate_metadata_from_atom(probe_name, probe_atoms)? {
-            Some(mut md) => {
-                if let Some(obj) = md.as_object_mut() {
-                    obj.insert("code-name".to_string(), json!(probe_name));
-                }
-                md
-            }
+        let meta_data = match generate_enriched_entry(probe_name, probe_atoms)? {
+            Some(md) => md,
             None => {
                 eprintln!("WARNING: Missing code-path or line info for {}", path.display());
                 skipped_count += 1;
