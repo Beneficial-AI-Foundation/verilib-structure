@@ -37,8 +37,8 @@ enum Commands {
         #[arg(long = "type", value_enum)]
         structure_type: StructureType,
 
-        /// Structure form: 'json' or 'files' (default: json)
-        #[arg(long, value_enum, default_value = "json")]
+        /// Structure form: 'json' or 'files' (default: files)
+        #[arg(long, value_enum, default_value = "files")]
         form: StructureForm,
 
         /// Root directory for structure files (default: .verilib/structure)

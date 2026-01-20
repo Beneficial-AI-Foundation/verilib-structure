@@ -114,7 +114,7 @@ impl ConfigPaths {
         Ok(Self {
             config,
             structure_root,
-            structure_json_path: verilib_path.join("structure_files.json"),
+            structure_json_path: verilib_path.join("stubs.json"),
             structure_meta_path: verilib_path.join("structure_meta.json"),
             blueprint_json_path: verilib_path.join("blueprint.json"),
             atoms_path: verilib_path.join("atoms.json"),

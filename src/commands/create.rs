@@ -22,7 +22,7 @@ pub fn run(
     let project_root = project_root.canonicalize()
         .context("Failed to resolve project root")?;
     let verilib_path = project_root.join(".verilib");
-    let structure_json_path = verilib_path.join("structure_files.json");
+    let structure_json_path = verilib_path.join("stubs.json");
 
     let (structure, structure_root_relative) = match structure_type {
         StructureType::Blueprint => {

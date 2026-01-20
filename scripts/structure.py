@@ -175,7 +175,7 @@ def get_structure_names(
         structure_type: Either "dalek-lite" or "blueprint".
         structure_form: Either "json" or "files".
         structure_root: Path to the structure root directory (for files form).
-        structure_json_path: Path to structure_files.json (for json form).
+        structure_json_path: Path to stubs.json (for json form).
 
     Returns:
         Set of identifier names defined in the structure (code-name or veri-name).
@@ -226,7 +226,7 @@ def load_config(project_root: Path) -> dict:
             - structure-root: Relative path string
             - verilib_path: Absolute Path to .verilib
             - structure_root: Absolute Path to structure root
-            - structure_json_path: Absolute Path to structure_files.json
+            - structure_json_path: Absolute Path to stubs.json
             - certs_specify_dir: Absolute Path to certs/specify/
             - certs_verify_dir: Absolute Path to certs/verify/
 
@@ -253,7 +253,7 @@ def load_config(project_root: Path) -> dict:
     # Add computed paths
     config["verilib_path"] = verilib_path
     config["structure_root"] = project_root / structure_root_relative
-    config["structure_json_path"] = verilib_path / "structure_files.json"
+    config["structure_json_path"] = verilib_path / "stubs.json"
     config["certs_specify_dir"] = verilib_path / "certs" / "specify"
     config["certs_verify_dir"] = verilib_path / "certs" / "verify"
 
@@ -846,7 +846,7 @@ def cmd_create(args: argparse.Namespace) -> None:
     """
     project_root = args.project_root.resolve()
     verilib_path = project_root / ".verilib"
-    structure_json_path = verilib_path / "structure_files.json"
+    structure_json_path = verilib_path / "stubs.json"
 
     if args.type == "blueprint":
         structure_root_relative = "blueprint"
@@ -2149,8 +2149,8 @@ Examples:
     create_parser.add_argument(
         "--form",
         choices=["json", "files"],
-        default="json",
-        help="Structure form: 'json' or 'files' (default: json)"
+        default="files",
+        help="Structure form: 'json' or 'files' (default: files)"
     )
     create_parser.add_argument(
         "--root",
