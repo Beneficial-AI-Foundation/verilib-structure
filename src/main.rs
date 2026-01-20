@@ -41,7 +41,7 @@ enum Commands {
         #[arg(long, value_enum, default_value = "json")]
         form: StructureForm,
 
-        /// Root directory for structure files (default: .verilib)
+        /// Root directory for structure files (default: .verilib/structure)
         #[arg(long)]
         root: Option<PathBuf>,
     },

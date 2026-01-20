@@ -48,7 +48,7 @@ pub fn run(
         StructureType::DalekLite => {
             let structure_root_relative = root
                 .map(|r| r.to_string_lossy().to_string())
-                .unwrap_or_else(|| ".verilib".to_string());
+                .unwrap_or_else(|| ".verilib/structure".to_string());
 
             let tracked_path = project_root.join("functions_to_track.csv");
             if !tracked_path.exists() {

@@ -867,7 +867,7 @@ def cmd_create(args: argparse.Namespace) -> None:
 
     elif args.type == "dalek-lite":
         if args.root is None:
-            structure_root_relative = ".verilib"
+            structure_root_relative = ".verilib/structure"
         else:
             structure_root_relative = str(args.root)
 
@@ -2144,7 +2144,7 @@ Examples:
         "--root",
         type=Path,
         default=None,
-        help="Root directory for structure files (default: .verilib)"
+        help="Root directory for structure files (default: .verilib/structure)"
     )
 
     # Atomize subcommand

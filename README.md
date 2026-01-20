@@ -85,7 +85,7 @@ verilib-structure create [PROJECT_ROOT] --type <type> [--form <form>] [--root <r
 |--------|--------|-------------|
 | `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
 | `--form` | `json`, `files` | Structure form (default: `json`) |
-| `--root` | path | Root directory for structure files (default: `.verilib`, ignored for blueprint which uses `blueprint`) |
+| `--root` | path | Root directory for structure files (default: `.verilib/structure`, ignored for blueprint which uses `blueprint`) |
 
 **Structure forms:**
 
@@ -99,7 +99,7 @@ Creates `<project_root>/.verilib/config.json` with:
 {
   "structure-type": "dalek-lite",
   "structure-form": "files",
-  "structure-root": ".verilib"
+  "structure-root": ".verilib/structure"
 }
 ```
 
