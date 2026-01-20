@@ -119,7 +119,7 @@ pub fn get_structure_names(
 ) -> Result<HashSet<String>> {
     let name_field = match structure_type {
         StructureType::Blueprint => "veri-name",
-        StructureType::DalekLite => "scip-name",
+        StructureType::DalekLite => "code-name",
     };
 
     let mut names = HashSet::new();

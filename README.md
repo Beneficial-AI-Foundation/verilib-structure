@@ -125,7 +125,7 @@ verilib-structure create --type blueprint --form files
 ---
 code-path: path/to/source/file.rs
 code-line: 42
-scip-name: null
+code-name: null
 ---
 ```
 
@@ -143,7 +143,7 @@ dependencies: [veri:dep1, veri:dep2]
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, syncs structure with `scip-name` identifiers
+- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, syncs structure with `code-name` identifiers
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
 **Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
@@ -248,7 +248,7 @@ verilib-structure specify [PROJECT_ROOT]
 **Cert files:**
 
 Certs are stored in `.verilib/certs/specify/` with one JSON file per certified function:
-- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
+- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -315,7 +315,7 @@ verilib-structure verify [PROJECT_ROOT] [--verify-only-module <module>]
 **Cert files:**
 
 Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
-- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
+- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**

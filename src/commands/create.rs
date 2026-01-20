@@ -560,7 +560,7 @@ fn tracked_to_structure(tracked: &HashMap<String, TrackedFunction>) -> HashMap<S
                 json!({
                     "code-line": line_start,
                     "code-path": code_path,
-                    "scip-name": null,
+                    "code-name": null,
                 }),
             );
         }

@@ -19,8 +19,8 @@ Verilib structure files for outlining verification goals
 
 3. Install atomization and verification tool.
    ```
-   git clone https://github.com/Beneficial-AI-Foundation/scip-atoms
-   cd scip-atoms
+   git clone https://github.com/Beneficial-AI-Foundation/probe-verus
+   cd probe-verus
    cargo install --path .
    ```
 
@@ -110,7 +110,7 @@ uv run scripts/structure.py create --type blueprint --form files
 ---
 code-path: path/to/source/file.rs
 code-line: 42
-scip-name: null
+code-name: null
 ---
 ```
 
@@ -128,7 +128,7 @@ dependencies: [veri:dep1, veri:dep2]
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `scip-atoms` to generate SCIP data, syncs structure with `scip-name` identifiers
+- **dalek-lite**: Runs `probe-verus` to generate SCIP data, syncs structure with `code-name` identifiers
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
 **Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
@@ -162,15 +162,15 @@ uv run scripts/structure.py atomize /path/to/project
 
 **Generated metadata format (dalek-lite):**
 
-The `structure_meta.json` file maps scip-name to metadata:
+The `structure_meta.json` file maps code-name to metadata:
 
 ```json
 {
-  "scip:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()": {
+  "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()": {
     "code-path": "curve25519-dalek/src/montgomery.rs",
     "code-lines": { "start": 42, "end": 50 },
     "code-module": "montgomery",
-    "dependencies": ["scip:..."],
+    "dependencies": ["probe:..."],
     "specified": false,
     "visible": true
   }
@@ -199,7 +199,7 @@ For each `XXX.md` file, creates:
 
 Checks specification status and manages specification certs. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `scip-atoms specify` to identify functions with `requires`/`ensures` specs
+- **dalek-lite**: Runs `probe-verus specify` to identify functions with `requires`/`ensures` specs
 - **blueprint**: Checks `type-status` in `blueprint.json` (`stated` or `mathlib` = has spec)
 
 **Usage:**
@@ -233,7 +233,7 @@ uv run scripts/structure.py specify [project_root]
 **Cert files:**
 
 Certs are stored in `.verilib/certs/specify/` with one JSON file per certified function:
-- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
+- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -258,7 +258,7 @@ When prompted, you can enter:
 
 Runs verification and automatically manages verification certs. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `scip-atoms verify` to check proof status
+- **dalek-lite**: Runs `probe-verus verify` to check proof status
 - **blueprint**: Checks `term-status` in `blueprint.json` (`fully-proved` = verified)
 
 **Usage:**
@@ -281,7 +281,7 @@ uv run scripts/structure.py verify [project_root] [--verify-only-module <module>
 
 **Workflow:**
 
-1. Checks verification status (dalek-lite: scip-atoms, blueprint: term-status)
+1. Checks verification status (dalek-lite: probe-verus, blueprint: term-status)
 2. Filters to only functions in the structure
 3. Compares with existing certs in `.verilib/certs/verify/`
 4. Creates new certs for verified functions without certs
@@ -300,7 +300,7 @@ uv run scripts/structure.py verify [project_root] [--verify-only-module <module>
 **Cert files:**
 
 Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
-- Filename: URL-encoded identifier (scip-name or veri-name) + `.json`
+- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -326,11 +326,11 @@ VERIFICATION CERT CHANGES
 
 ✓ Created 5 new certs:
   + func_name
-    scip:crate/version/module#func()
+    probe:crate/version/module#func()
 
 ✗ Deleted 2 certs (verification failed):
   - other_func
-    scip:crate/version/module#other_func()
+    probe:crate/version/module#other_func()
 
 ============================================================
 Total certs: 10 → 13

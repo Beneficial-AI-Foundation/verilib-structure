@@ -92,7 +92,7 @@ def encode_name(name: str) -> str:
     Uses URL percent-encoding to replace special characters like '/', ':', '#', etc.
 
     Args:
-        name: The identifier (scip-name or veri-name)
+        name: The identifier (code-name or veri-name)
 
     Returns:
         Encoded string safe for use as a filename.
@@ -108,7 +108,7 @@ def decode_name(encoded: str) -> str:
         encoded: URL percent-encoded filename.
 
     Returns:
-        Original identifier (scip-name or veri-name).
+        Original identifier (code-name or veri-name).
     """
     return unquote(encoded)
 
@@ -142,7 +142,7 @@ def create_cert(certs_dir: Path, name: str) -> Path:
 
     Args:
         certs_dir: Path to the certs directory.
-        name: The identifier (scip-name or veri-name).
+        name: The identifier (code-name or veri-name).
 
     Returns:
         Path to the created cert file.
@@ -178,10 +178,10 @@ def get_structure_names(
         structure_json_path: Path to structure_files.json (for json form).
 
     Returns:
-        Set of identifier names defined in the structure (scip-name or veri-name).
+        Set of identifier names defined in the structure (code-name or veri-name).
     """
     # Determine which field to look for based on structure type
-    name_field = "veri-name" if structure_type == "blueprint" else "scip-name"
+    name_field = "veri-name" if structure_type == "blueprint" else "code-name"
 
     names = set()
 
@@ -740,7 +740,7 @@ def tracked_to_structure(tracked: dict) -> dict[str, dict]:
         Dictionary mapping file_path (str) to dict with keys:
             - code-path: Relative path to source file
             - code-line: Line number where function starts
-            - scip-name: null (populated later by atomize)
+            - code-name: null (populated later by atomize)
     """
     result = {}
 
@@ -757,7 +757,7 @@ def tracked_to_structure(tracked: dict) -> dict[str, dict]:
         result[file_path] = {
             "code-line": line_start,
             "code-path": code_path,
-            "scip-name": None,
+            "code-name": None,
         }
 
     return result
@@ -1016,7 +1016,7 @@ def _update_entry_from_atoms(
     Update a structure entry with probe atom data.
 
     Args:
-        entry: Dictionary with 'code-path', 'code-line', and optionally 'scip-name'
+        entry: Dictionary with 'code-path', 'code-line', and optionally 'code-name'
         probe_index: Dictionary mapping code-path to IntervalTree
         probe_atoms: Dictionary mapping probe-name to atom data
         context: Optional context string for warning messages
@@ -1026,7 +1026,7 @@ def _update_entry_from_atoms(
     """
     code_path = entry.get('code-path')
     line_start = entry.get('code-line')
-    existing_probe_name = entry.get('scip-name')
+    existing_probe_name = entry.get('code-name')
 
     updated = dict(entry)
 
@@ -1052,11 +1052,11 @@ def _update_entry_from_atoms(
     else:
         if existing_probe_name:
             ctx = f" for {context}" if context else ""
-            print(f"WARNING: scip-name '{existing_probe_name}' not found in probe_atoms{ctx}, "
+            print(f"WARNING: code-name '{existing_probe_name}' not found in probe_atoms{ctx}, "
                   f"looking up by code-path/code-line")
         if not code_path or line_start is None:
             ctx = f" for {context}" if context else ""
-            print(f"WARNING: Missing code-path or code-line{ctx}; scip-name will not be generated")
+            print(f"WARNING: Missing code-path or code-line{ctx}; code-name will not be generated")
             return updated, None
 
         if code_path not in probe_index:
@@ -1074,7 +1074,7 @@ def _update_entry_from_atoms(
             print(f"WARNING: Multiple intervals starting at line {line_start} in {code_path}{ctx}")
 
         interval = exact_matches[0]
-        updated['scip-name'] = interval.data
+        updated['code-name'] = interval.data
 
     return updated, None
 
@@ -1101,8 +1101,8 @@ def sync_structure_files_with_atoms(
 
         post['code-path'] = updated['code-path']
         post['code-line'] = updated['code-line']
-        if 'scip-name' in updated:
-            post['scip-name'] = updated['scip-name']
+        if 'code-name' in updated:
+            post['code-name'] = updated['code-name']
 
         with open(md_file, 'w', encoding='utf-8') as f:
             f.write(frontmatter.dumps(post))
@@ -1147,7 +1147,7 @@ def _generate_metadata_from_atom(
 ) -> tuple[dict | None, str | None]:
     """Generate metadata dict from probe atom data."""
     if not probe_name or probe_name not in probe_atoms:
-        return None, "Missing or invalid scip-name"
+        return None, "Missing or invalid code-name"
 
     atom = probe_atoms[probe_name]
     code_path = atom.get('code-path')
@@ -1187,7 +1187,7 @@ def populate_structure_files_metadata(
 
     for md_file in structure_root.rglob("*.md"):
         post = frontmatter.load(md_file)
-        probe_name = post.get('scip-name')
+        probe_name = post.get('code-name')
 
         meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
 
@@ -1196,7 +1196,7 @@ def populate_structure_files_metadata(
             skipped_count += 1
             continue
 
-        meta_data["scip-name"] = probe_name
+        meta_data["code-name"] = probe_name
 
         meta_file = md_file.with_suffix('.meta.verilib')
         with open(meta_file, 'w', encoding='utf-8') as f:
@@ -1238,7 +1238,7 @@ def populate_structure_json_metadata(
     skipped_count = 0
 
     for file_path, entry in structure.items():
-        probe_name = entry.get('scip-name')
+        probe_name = entry.get('code-name')
 
         meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
 
@@ -1361,7 +1361,7 @@ def structure_to_tree(structure_root: Path) -> list[dict]:
         with open(meta_file, encoding="utf-8") as f:
             meta_data = json.load(f)
 
-        scip_name = meta_data.get("scip-name", "")
+        scip_name = meta_data.get("code-name", "")
         if not scip_name:
             continue
 
@@ -1401,7 +1401,7 @@ def structure_to_tree(structure_root: Path) -> list[dict]:
             with open(meta_file, encoding="utf-8") as f:
                 meta_data = json.load(f)
 
-            scip_name = meta_data.get("scip-name", "")
+            scip_name = meta_data.get("code-name", "")
             if not scip_name:
                 continue
 
@@ -1970,7 +1970,7 @@ def delete_cert(certs_dir: Path, name: str) -> Path | None:
 
     Args:
         certs_dir: Path to the certs directory.
-        name: The identifier (scip-name or veri-name).
+        name: The identifier (code-name or veri-name).
 
     Returns:
         Path to the deleted cert file, or None if it didn't exist.

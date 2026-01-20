@@ -26,7 +26,7 @@ The script is self-contained with PEP 723 inline metadata (dependencies declared
 
 | Type | Identifier | Source | Use Case |
 |------|------------|--------|----------|
-| `dalek-lite` | `scip-name` | Verus/Rust code | Verus verification projects |
+| `dalek-lite` | `code-name` | Verus/Rust code | Verus verification projects |
 | `blueprint` | `veri-name` | Lean blueprint | Lean formalization projects |
 
 ### Pipeline Flow
@@ -36,7 +36,7 @@ The script is self-contained with PEP 723 inline metadata (dependencies declared
    - `blueprint`: Runs `leanblueprint web`, parses HTML, saves to `blueprint.json`
 
 2. **atomize** - Enriches structure with metadata
-   - `dalek-lite`: Runs `probe-verus atomize`, populates `scip-name` and code metadata
+   - `dalek-lite`: Runs `probe-verus atomize`, populates `code-name` and code metadata
    - `blueprint`: Reads `blueprint.json`, generates metadata with `veri-name` and dependencies
 
 3. **specify** - Manages specification certs

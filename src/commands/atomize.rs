@@ -398,7 +398,7 @@ fn update_entry_from_atoms(
 ) -> Result<(Value, Option<String>)> {
     let code_path = entry.get("code-path").and_then(|v| v.as_str());
     let line_start = entry.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
-    let existing_probe_name = entry.get("scip-name").and_then(|v| v.as_str());
+    let existing_probe_name = entry.get("code-name").and_then(|v| v.as_str());
 
     let mut updated = entry.clone();
 
@@ -439,7 +439,7 @@ fn update_entry_from_atoms(
             return Ok((updated, None));
         } else {
             eprintln!(
-                "WARNING: scip-name '{}' not found in probe_atoms for {}, looking up by code-path/code-line",
+                "WARNING: code-name '{}' not found in probe_atoms for {}, looking up by code-path/code-line",
                 probe_name, context
             );
         }
@@ -449,7 +449,7 @@ fn update_entry_from_atoms(
         (Some(p), Some(l)) => (p, l),
         _ => {
             eprintln!(
-                "WARNING: Missing code-path or code-line for {}; scip-name will not be generated",
+                "WARNING: Missing code-path or code-line for {}; code-name will not be generated",
                 context
             );
             return Ok((updated, None));
@@ -490,7 +490,7 @@ fn update_entry_from_atoms(
 
     let probe_name = &matching_intervals[0].value;
     if let Some(obj) = updated.as_object_mut() {
-        obj.insert("scip-name".to_string(), json!(probe_name));
+        obj.insert("code-name".to_string(), json!(probe_name));
     }
 
     Ok((updated, None))
@@ -646,10 +646,10 @@ fn populate_structure_json_metadata(
     let mut skipped_count = 0;
 
     for (file_path, entry) in structure {
-        let probe_name = match entry.get("scip-name").and_then(|v| v.as_str()) {
+        let probe_name = match entry.get("code-name").and_then(|v| v.as_str()) {
             Some(name) => name,
             None => {
-                eprintln!("WARNING: Missing or invalid scip-name for {}", file_path);
+                eprintln!("WARNING: Missing or invalid code-name for {}", file_path);
                 skipped_count += 1;
                 continue;
             }
@@ -699,10 +699,10 @@ fn populate_structure_files_metadata(
             }
         };
 
-        let probe_name = match frontmatter.get("scip-name").and_then(|v| v.as_str()) {
+        let probe_name = match frontmatter.get("code-name").and_then(|v| v.as_str()) {
             Some(name) => name,
             None => {
-                eprintln!("WARNING: Missing scip-name for {}", path.display());
+                eprintln!("WARNING: Missing code-name for {}", path.display());
                 skipped_count += 1;
                 continue;
             }
@@ -711,7 +711,7 @@ fn populate_structure_files_metadata(
         let meta_data = match generate_metadata_from_atom(probe_name, probe_atoms)? {
             Some(mut md) => {
                 if let Some(obj) = md.as_object_mut() {
-                    obj.insert("scip-name".to_string(), json!(probe_name));
+                    obj.insert("code-name".to_string(), json!(probe_name));
                 }
                 md
             }
