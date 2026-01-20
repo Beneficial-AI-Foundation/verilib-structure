@@ -36,15 +36,15 @@ The script is self-contained with PEP 723 inline metadata (dependencies declared
    - `blueprint`: Runs `leanblueprint web`, parses HTML, saves to `blueprint.json`
 
 2. **atomize** - Enriches structure with metadata
-   - `dalek-lite`: Runs `scip-atoms`, populates `scip-name` and code metadata
+   - `dalek-lite`: Runs `probe-verus atomize`, populates `scip-name` and code metadata
    - `blueprint`: Reads `blueprint.json`, generates metadata with `veri-name` and dependencies
 
 3. **specify** - Manages specification certs
-   - `dalek-lite`: Runs `scip-atoms specify` (has_requires/has_ensures)
+   - `dalek-lite`: Runs `probe-verus specify` (has_requires/has_ensures)
    - `blueprint`: Checks `type-status` in `blueprint.json` (stated/mathlib = has spec)
 
 4. **verify** - Manages verification certs
-   - `dalek-lite`: Runs `scip-atoms verify`
+   - `dalek-lite`: Runs `probe-verus verify`
    - `blueprint`: Checks `term-status` in `blueprint.json` (fully-proved = verified)
 
 ### Data Storage
@@ -65,7 +65,7 @@ All data lives in `.verilib/` within the target project:
 
 ### External Dependencies
 
-- `scip-atoms` (Rust CLI) - Source code intelligence and verification (dalek-lite only)
+- `probe-verus` (Rust CLI) - Source code intelligence and verification (dalek-lite only)
 - `leanblueprint` (Python) - Blueprint generation for Lean projects (blueprint only)
 - `graphviz` (system) - Required for leanblueprint
 - Verus/Verus Analyzer - For dalek-lite verification

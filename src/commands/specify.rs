@@ -2,10 +2,10 @@
 //!
 //! Check specification status and manage spec certs.
 
-use crate::config::constants::{BLUEPRINT_SPEC_STATUSES, SCIP_PREFIX};
+use crate::config::constants::BLUEPRINT_SPEC_STATUSES;
 use crate::config::ConfigPaths;
 use crate::utils::{
-    check_scip_atoms_or_exit, create_cert, display_menu, get_existing_certs, get_structure_names,
+    check_probe_verus_or_exit, create_cert, display_menu, get_existing_certs, get_structure_names,
     run_command,
 };
 use crate::StructureType;
@@ -53,8 +53,8 @@ pub fn run(project_root: PathBuf) -> Result<()> {
         }
 
         StructureType::DalekLite => {
-            let specs_path = config.verilib_path.join("specification.json");
-            let specs_data = run_scip_specify(&project_root, &specs_path, &config.atoms_path)?;
+            let specs_path = config.verilib_path.join("specs.json");
+            let specs_data = run_probe_specify(&project_root, &specs_path, &config.atoms_path)?;
 
             let functions_with_specs = get_functions_with_specs(&specs_data);
             println!(
@@ -178,28 +178,28 @@ pub fn run(project_root: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// Run scip-atoms specify and return the results.
-fn run_scip_specify(
+/// Run probe-verus specify and return the results.
+fn run_probe_specify(
     project_root: &Path,
     specs_path: &Path,
     atoms_path: &Path,
 ) -> Result<HashMap<String, Value>> {
-    check_scip_atoms_or_exit()?;
+    check_probe_verus_or_exit()?;
 
     if let Some(parent) = specs_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    println!("Running scip-atoms specify on {}...", project_root.display());
+    println!("Running probe-verus specify on {}...", project_root.display());
 
     let output = run_command(
-        "scip-atoms",
+        "probe-verus",
         &[
             "specify",
-            SCIP_PREFIX,
-            "--json-output",
+            project_root.to_str().unwrap(),
+            "-o",
             specs_path.to_str().unwrap(),
-            "--with-scip-names",
+            "-a",
             atoms_path.to_str().unwrap(),
         ],
         Some(project_root),
@@ -207,11 +207,11 @@ fn run_scip_specify(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Error: scip-atoms specify failed.");
+        eprintln!("Error: probe-verus specify failed.");
         if !stderr.is_empty() {
             eprintln!("{}", stderr);
         }
-        bail!("scip-atoms specify failed");
+        bail!("probe-verus specify failed");
     }
 
     println!("Specs saved to {}", specs_path.display());

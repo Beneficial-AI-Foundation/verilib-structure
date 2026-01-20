@@ -2,10 +2,10 @@
 //!
 //! Run verification and manage verification certs.
 
-use crate::config::constants::{BLUEPRINT_VERIFIED_STATUSES, SCIP_PREFIX};
+use crate::config::constants::BLUEPRINT_VERIFIED_STATUSES;
 use crate::config::ConfigPaths;
 use crate::utils::{
-    check_scip_atoms_or_exit, create_cert, delete_cert, get_display_name, get_existing_certs,
+    check_probe_verus_or_exit, create_cert, delete_cert, get_display_name, get_existing_certs,
     get_structure_names, run_command,
 };
 use crate::StructureType;
@@ -33,14 +33,14 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         }
 
         StructureType::DalekLite => {
-            let verification_path = config.verilib_path.join("verification.json");
-            let verification_data = run_scip_verify(
+            let proofs_path = config.verilib_path.join("proofs.json");
+            let proofs_data = run_probe_verify(
                 &project_root,
-                &verification_path,
+                &proofs_path,
                 &config.atoms_path,
                 verify_only_module.as_deref(),
             )?;
-            get_verification_results(&verification_data)
+            get_verification_results(&proofs_data)
         }
     };
 
@@ -139,25 +139,25 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
     Ok(())
 }
 
-/// Run scip-atoms verify and return the results.
-fn run_scip_verify(
+/// Run probe-verus verify and return the results.
+fn run_probe_verify(
     project_root: &Path,
-    verification_path: &Path,
+    proofs_path: &Path,
     atoms_path: &Path,
     verify_only_module: Option<&str>,
 ) -> Result<HashMap<String, Value>> {
-    check_scip_atoms_or_exit()?;
+    check_probe_verus_or_exit()?;
 
-    if let Some(parent) = verification_path.parent() {
+    if let Some(parent) = proofs_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
     let mut args = vec![
         "verify",
-        SCIP_PREFIX,
-        "--json-output",
-        verification_path.to_str().unwrap(),
-        "--with-scip-names",
+        project_root.to_str().unwrap(),
+        "-o",
+        proofs_path.to_str().unwrap(),
+        "-a",
         atoms_path.to_str().unwrap(),
     ];
 
@@ -165,31 +165,31 @@ fn run_scip_verify(
         args.push("--verify-only-module");
         args.push(module);
         println!(
-            "Running scip-atoms verify on {} (module: {})...",
+            "Running probe-verus verify on {} (module: {})...",
             project_root.display(),
             module
         );
     } else {
         println!(
-            "Running scip-atoms verify on {}...",
+            "Running probe-verus verify on {}...",
             project_root.display()
         );
     }
 
-    let output = run_command("scip-atoms", &args, Some(project_root))?;
+    let output = run_command("probe-verus", &args, Some(project_root))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Error: scip-atoms verify failed.");
+        eprintln!("Error: probe-verus verify failed.");
         if !stderr.is_empty() {
             eprintln!("{}", stderr);
         }
-        bail!("scip-atoms verify failed");
+        bail!("probe-verus verify failed");
     }
 
     println!(
         "Verification results saved to {}",
-        verification_path.display()
+        proofs_path.display()
     );
 
     // Clean up generated intermediate files
@@ -210,31 +210,36 @@ fn run_scip_verify(
         }
     }
 
-    let content = std::fs::read_to_string(verification_path)?;
-    let verification: HashMap<String, Value> = serde_json::from_str(&content)?;
-    Ok(verification)
+    let content = std::fs::read_to_string(proofs_path)?;
+    let proofs: HashMap<String, Value> = serde_json::from_str(&content)?;
+    Ok(proofs)
 }
 
-/// Extract verified and failed function scip-names from verification data.
-fn get_verification_results(verification_data: &HashMap<String, Value>) -> (HashSet<String>, HashSet<String>) {
+/// Extract verified and failed function probe-names from proofs data.
+///
+/// The proofs.json schema from probe-verus is a dictionary keyed by probe-name:
+/// {
+///   "probe:crate/version/module/function()": {
+///     "code-path": "string",
+///     "code-line": number,
+///     "verified": boolean,
+///     "status": "success|failure|sorries|warning"
+///   }
+/// }
+fn get_verification_results(proofs_data: &HashMap<String, Value>) -> (HashSet<String>, HashSet<String>) {
     let mut verified = HashSet::new();
     let mut failed = HashSet::new();
 
-    if let Some(verification) = verification_data.get("verification") {
-        if let Some(verified_funcs) = verification.get("verified_functions").and_then(|v| v.as_array()) {
-            for func in verified_funcs {
-                if let Some(scip_name) = func.get("scip-name").and_then(|v| v.as_str()) {
-                    verified.insert(scip_name.to_string());
-                }
-            }
-        }
+    for (probe_name, func_data) in proofs_data {
+        let is_verified = func_data
+            .get("verified")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
-        if let Some(failed_funcs) = verification.get("failed_functions").and_then(|v| v.as_array()) {
-            for func in failed_funcs {
-                if let Some(scip_name) = func.get("scip-name").and_then(|v| v.as_str()) {
-                    failed.insert(scip_name.to_string());
-                }
-            }
+        if is_verified {
+            verified.insert(probe_name.clone());
+        } else {
+            failed.insert(probe_name.clone());
         }
     }
 

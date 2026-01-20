@@ -119,11 +119,11 @@ impl ConfigPaths {
 
 /// Constants used throughout the application
 pub mod constants {
-    /// Repository for scip-atoms installation instructions
-    pub const SCIP_ATOMS_REPO: &str = "https://github.com/Beneficial-AI-Foundation/scip-atoms";
+    /// Repository for probe-verus installation instructions
+    pub const PROBE_VERUS_REPO: &str = "https://github.com/Beneficial-AI-Foundation/probe-verus";
 
-    /// SCIP prefix for filtering atoms
-    pub const SCIP_PREFIX: &str = "curve25519-dalek";
+    /// Probe prefix for filtering atoms
+    pub const PROBE_PREFIX: &str = "curve25519-dalek";
 
     /// Type-status values that indicate a function has a spec (blueprint)
     pub const BLUEPRINT_SPEC_STATUSES: &[&str] = &["stated", "mathlib"];

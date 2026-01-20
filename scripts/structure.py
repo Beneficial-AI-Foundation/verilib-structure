@@ -58,8 +58,8 @@ from lxml import html
 # CONSTANTS
 # =============================================================================
 
-SCIP_ATOMS_REPO = "https://github.com/Beneficial-AI-Foundation/scip-atoms"
-SCIP_PREFIX = "curve25519-dalek"
+PROBE_VERUS_REPO = "https://github.com/Beneficial-AI-Foundation/probe-verus"
+PROBE_PREFIX = "curve25519-dalek"
 
 # Type-status values that indicate a function has a spec
 BLUEPRINT_SPEC_STATUSES = {'stated', 'mathlib'}
@@ -72,15 +72,15 @@ BLUEPRINT_VERIFIED_STATUSES = {'fully-proved'}
 # COMMON UTILITIES
 # =============================================================================
 
-def check_scip_atoms_or_exit() -> None:
-    """Check if scip-atoms is installed, exit with instructions if not."""
-    installed = shutil.which("scip-atoms") is not None
+def check_probe_verus_or_exit() -> None:
+    """Check if probe-verus is installed, exit with instructions if not."""
+    installed = shutil.which("probe-verus") is not None
     if not installed:
-        print("Error: scip-atoms is not installed.")
-        print(f"Please visit {SCIP_ATOMS_REPO} for installation instructions.")
+        print("Error: probe-verus is not installed.")
+        print(f"Please visit {PROBE_VERUS_REPO} for installation instructions.")
         print("\nQuick install:")
-        print("  git clone", SCIP_ATOMS_REPO)
-        print("  cd scip-atoms")
+        print("  git clone", PROBE_VERUS_REPO)
+        print("  cd probe-verus")
         print("  cargo install --path .")
         raise SystemExit(1)
 
@@ -909,33 +909,33 @@ def cmd_create(args: argparse.Namespace) -> None:
 # ATOMIZE SUBCOMMAND FUNCTIONS
 # =============================================================================
 
-def generate_scip_atoms(project_root: Path, atoms_path: Path) -> dict[str, dict]:
+def generate_probe_atoms(project_root: Path, atoms_path: Path) -> dict[str, dict]:
     """
-    Run scip-atoms on the project and save results to atoms.json.
+    Run probe-verus atomize on the project and save results to atoms.json.
 
     Args:
         project_root: Root directory of the project to analyze.
         atoms_path: Path where atoms.json will be written.
 
     Returns:
-        Dictionary mapping scip-name to atom data.
+        Dictionary mapping probe-name to atom data.
 
     Raises:
-        SystemExit: If scip-atoms is not installed or fails to run.
+        SystemExit: If probe-verus is not installed or fails to run.
     """
-    check_scip_atoms_or_exit()
+    check_probe_verus_or_exit()
 
     atoms_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Running scip-atoms on {project_root}...")
+    print(f"Running probe-verus atomize on {project_root}...")
     result = subprocess.run(
-        ["scip-atoms", "atoms", str(project_root), "-o", str(atoms_path), "-r"],
+        ["probe-verus", "atomize", str(project_root), "-o", str(atoms_path), "-r"],
         capture_output=True,
         text=True,
     )
 
     if result.returncode != 0:
-        print("Error: scip-atoms failed.")
+        print("Error: probe-verus atomize failed.")
         if result.stderr:
             print(result.stderr)
         raise SystemExit(1)
@@ -956,19 +956,19 @@ def generate_scip_atoms(project_root: Path, atoms_path: Path) -> dict[str, dict]
         return json.load(f)
 
 
-def generate_scip_index(scip_atoms: dict[str, dict]) -> dict[str, IntervalTree]:
+def generate_probe_index(probe_atoms: dict[str, dict]) -> dict[str, IntervalTree]:
     """
     Build an interval tree index for fast line-based lookups.
 
     Args:
-        scip_atoms: Dictionary mapping scip-name to atom data.
+        probe_atoms: Dictionary mapping probe-name to atom data.
 
     Returns:
         Dictionary mapping code-path to IntervalTree.
     """
     trees: dict[str, IntervalTree] = defaultdict(IntervalTree)
 
-    for scip_name, atom_data in scip_atoms.items():
+    for probe_name, atom_data in probe_atoms.items():
         code_path = atom_data.get('code-path')
         code_text = atom_data.get('code-text', {})
 
@@ -982,43 +982,43 @@ def generate_scip_index(scip_atoms: dict[str, dict]) -> dict[str, IntervalTree]:
             continue
 
         interval_end = lines_end + 1
-        trees[code_path].addi(lines_start, interval_end, scip_name)
+        trees[code_path].addi(lines_start, interval_end, probe_name)
 
     return dict(trees)
 
 
-def filter_scip_atoms(scip_atoms: dict[str, dict], prefix: str) -> dict[str, dict]:
+def filter_probe_atoms(probe_atoms: dict[str, dict], prefix: str) -> dict[str, dict]:
     """
-    Filter SCIP atoms to only those where scip-name starts with prefix.
+    Filter probe atoms to only those where probe-name starts with prefix.
 
     Args:
-        scip_atoms: Dictionary mapping scip-name to atom data
+        probe_atoms: Dictionary mapping probe-name to atom data
         prefix: Crate name to filter by
 
     Returns:
         Filtered dictionary
     """
-    uri_prefix = f"scip:{prefix}/"
+    uri_prefix = f"probe:{prefix}/"
     return {
-        scip_name: atom_data
-        for scip_name, atom_data in scip_atoms.items()
-        if scip_name.startswith(uri_prefix)
+        probe_name: atom_data
+        for probe_name, atom_data in probe_atoms.items()
+        if probe_name.startswith(uri_prefix)
     }
 
 
 def _update_entry_from_atoms(
     entry: dict,
-    scip_index: dict[str, IntervalTree],
-    scip_atoms: dict[str, dict],
+    probe_index: dict[str, IntervalTree],
+    probe_atoms: dict[str, dict],
     context: str = ""
 ) -> tuple[dict | None, str | None]:
     """
-    Update a structure entry with SCIP atom data.
+    Update a structure entry with probe atom data.
 
     Args:
         entry: Dictionary with 'code-path', 'code-line', and optionally 'scip-name'
-        scip_index: Dictionary mapping code-path to IntervalTree
-        scip_atoms: Dictionary mapping scip-name to atom data
+        probe_index: Dictionary mapping code-path to IntervalTree
+        probe_atoms: Dictionary mapping probe-name to atom data
         context: Optional context string for warning messages
 
     Returns:
@@ -1026,12 +1026,12 @@ def _update_entry_from_atoms(
     """
     code_path = entry.get('code-path')
     line_start = entry.get('code-line')
-    existing_scip_name = entry.get('scip-name')
+    existing_probe_name = entry.get('scip-name')
 
     updated = dict(entry)
 
-    if existing_scip_name and existing_scip_name in scip_atoms:
-        atom = scip_atoms[existing_scip_name]
+    if existing_probe_name and existing_probe_name in probe_atoms:
+        atom = probe_atoms[existing_probe_name]
         atom_code_path = atom.get('code-path')
         atom_code_text = atom.get('code-text', {})
         atom_line_start = atom_code_text.get('lines-start')
@@ -1050,19 +1050,19 @@ def _update_entry_from_atoms(
         updated['code-line'] = atom_line_start
 
     else:
-        if existing_scip_name:
+        if existing_probe_name:
             ctx = f" for {context}" if context else ""
-            print(f"WARNING: scip-name '{existing_scip_name}' not found in scip_atoms{ctx}, "
+            print(f"WARNING: scip-name '{existing_probe_name}' not found in probe_atoms{ctx}, "
                   f"looking up by code-path/code-line")
         if not code_path or line_start is None:
             ctx = f" for {context}" if context else ""
             print(f"WARNING: Missing code-path or code-line{ctx}; scip-name will not be generated")
             return updated, None
 
-        if code_path not in scip_index:
-            return None, f"code-path '{code_path}' not found in scip_index"
+        if code_path not in probe_index:
+            return None, f"code-path '{code_path}' not found in probe_index"
 
-        tree = scip_index[code_path]
+        tree = probe_index[code_path]
         matching_intervals = tree[line_start]
         exact_matches = [iv for iv in matching_intervals if iv.begin == line_start]
 
@@ -1080,11 +1080,11 @@ def _update_entry_from_atoms(
 
 
 def sync_structure_files_with_atoms(
-    scip_index: dict[str, IntervalTree],
-    scip_atoms: dict[str, dict],
+    probe_index: dict[str, IntervalTree],
+    probe_atoms: dict[str, dict],
     structure_root: Path
 ) -> None:
-    """Sync structure .md files with SCIP atoms index."""
+    """Sync structure .md files with probe atoms index."""
     updated_count = 0
     not_found_count = 0
 
@@ -1092,7 +1092,7 @@ def sync_structure_files_with_atoms(
         post = frontmatter.load(md_file)
         entry = dict(post.metadata)
 
-        updated, error = _update_entry_from_atoms(entry, scip_index, scip_atoms, str(md_file))
+        updated, error = _update_entry_from_atoms(entry, probe_index, probe_atoms, str(md_file))
 
         if error:
             print(f"WARNING: {error} for {md_file}")
@@ -1115,16 +1115,16 @@ def sync_structure_files_with_atoms(
 
 def sync_structure_json_with_atoms(
     structure: dict[str, dict],
-    scip_index: dict[str, IntervalTree],
-    scip_atoms: dict[str, dict],
+    probe_index: dict[str, IntervalTree],
+    probe_atoms: dict[str, dict],
 ) -> dict[str, dict]:
-    """Sync structure dictionary with SCIP atoms index."""
+    """Sync structure dictionary with probe atoms index."""
     updated_count = 0
     not_found_count = 0
     result = {}
 
     for file_path, entry in structure.items():
-        updated, error = _update_entry_from_atoms(entry, scip_index, scip_atoms, file_path)
+        updated, error = _update_entry_from_atoms(entry, probe_index, probe_atoms, file_path)
 
         if error:
             print(f"WARNING: {error} for {file_path}")
@@ -1142,14 +1142,14 @@ def sync_structure_json_with_atoms(
 
 
 def _generate_metadata_from_atom(
-    scip_name: str,
-    scip_atoms: dict[str, dict],
+    probe_name: str,
+    probe_atoms: dict[str, dict],
 ) -> tuple[dict | None, str | None]:
-    """Generate metadata dict from SCIP atom data."""
-    if not scip_name or scip_name not in scip_atoms:
+    """Generate metadata dict from probe atom data."""
+    if not probe_name or probe_name not in probe_atoms:
         return None, "Missing or invalid scip-name"
 
-    atom = scip_atoms[scip_name]
+    atom = probe_atoms[probe_name]
     code_path = atom.get('code-path')
     code_text = atom.get('code-text', {})
     lines_start = code_text.get('lines-start')
@@ -1177,7 +1177,7 @@ def _generate_metadata_from_atom(
 
 
 def populate_structure_files_metadata(
-    scip_atoms: dict[str, dict],
+    probe_atoms: dict[str, dict],
     structure_root: Path,
     project_root: Path
 ) -> None:
@@ -1187,16 +1187,16 @@ def populate_structure_files_metadata(
 
     for md_file in structure_root.rglob("*.md"):
         post = frontmatter.load(md_file)
-        scip_name = post.get('scip-name')
+        probe_name = post.get('scip-name')
 
-        meta_data, error = _generate_metadata_from_atom(scip_name, scip_atoms)
+        meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
 
         if error:
             print(f"WARNING: {error} for {md_file}")
             skipped_count += 1
             continue
 
-        meta_data["scip-name"] = scip_name
+        meta_data["scip-name"] = probe_name
 
         meta_file = md_file.with_suffix('.meta.verilib')
         with open(meta_file, 'w', encoding='utf-8') as f:
@@ -1230,7 +1230,7 @@ def populate_structure_files_metadata(
 
 def populate_structure_json_metadata(
     structure: dict[str, dict],
-    scip_atoms: dict[str, dict],
+    probe_atoms: dict[str, dict],
 ) -> dict[str, dict]:
     """Generate metadata dictionary from structure JSON."""
     result = {}
@@ -1238,16 +1238,16 @@ def populate_structure_json_metadata(
     skipped_count = 0
 
     for file_path, entry in structure.items():
-        scip_name = entry.get('scip-name')
+        probe_name = entry.get('scip-name')
 
-        meta_data, error = _generate_metadata_from_atom(scip_name, scip_atoms)
+        meta_data, error = _generate_metadata_from_atom(probe_name, probe_atoms)
 
         if error:
             print(f"WARNING: {error} for {file_path}")
             skipped_count += 1
             continue
 
-        result[scip_name] = meta_data
+        result[probe_name] = meta_data
         created_count += 1
 
     print(f"Metadata entries created: {created_count}")
@@ -1512,9 +1512,9 @@ def cmd_atomize(args: argparse.Namespace) -> None:
 
     elif structure_type == "dalek-lite":
         atoms_path = verilib_path / "atoms.json"
-        scip_atoms = generate_scip_atoms(project_root, atoms_path)
-        scip_atoms = filter_scip_atoms(scip_atoms, SCIP_PREFIX)
-        scip_index = generate_scip_index(scip_atoms)
+        probe_atoms = generate_probe_atoms(project_root, atoms_path)
+        probe_atoms = filter_probe_atoms(probe_atoms, PROBE_PREFIX)
+        probe_index = generate_probe_index(probe_atoms)
 
         if structure_form == "json":
             if not structure_json_path.exists():
@@ -1525,15 +1525,15 @@ def cmd_atomize(args: argparse.Namespace) -> None:
             with open(structure_json_path, encoding='utf-8') as f:
                 structure = json.load(f)
 
-            print("Syncing structure with SCIP atoms...")
-            structure = sync_structure_json_with_atoms(structure, scip_index, scip_atoms)
+            print("Syncing structure with probe atoms...")
+            structure = sync_structure_json_with_atoms(structure, probe_index, probe_atoms)
 
             print(f"Saving updated structure to {structure_json_path}...")
             with open(structure_json_path, 'w', encoding='utf-8') as f:
                 json.dump(structure, f, indent=2)
 
             print("Populating structure metadata...")
-            metadata = populate_structure_json_metadata(structure, scip_atoms)
+            metadata = populate_structure_json_metadata(structure, probe_atoms)
 
             print(f"Saving metadata to {structure_meta_path}...")
             with open(structure_meta_path, 'w', encoding='utf-8') as f:
@@ -1541,11 +1541,11 @@ def cmd_atomize(args: argparse.Namespace) -> None:
             print("Done.")
 
         elif structure_form == "files":
-            print(f"Syncing structure files in {structure_root} with SCIP atoms...")
-            sync_structure_files_with_atoms(scip_index, scip_atoms, structure_root)
+            print(f"Syncing structure files in {structure_root} with probe atoms...")
+            sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
 
             print("Populating structure metadata files...")
-            populate_structure_files_metadata(scip_atoms, structure_root, project_root)
+            populate_structure_files_metadata(probe_atoms, structure_root, project_root)
             print("Done.")
 
     else:
@@ -1557,37 +1557,37 @@ def cmd_atomize(args: argparse.Namespace) -> None:
 # SPECIFY SUBCOMMAND FUNCTIONS
 # =============================================================================
 
-def run_scip_specify(project_root: Path, specs_path: Path, atoms_path: Path) -> dict:
+def run_probe_specify(project_root: Path, specs_path: Path, atoms_path: Path) -> dict:
     """
-    Run scip-atoms specify and return the results.
+    Run probe-verus specify and return the results.
 
     Args:
         project_root: Root directory of the project to analyze.
-        specs_path: Path where specification.json will be written.
-        atoms_path: Path to atoms.json for scip-name lookup.
+        specs_path: Path where specs.json will be written.
+        atoms_path: Path to atoms.json for probe-name lookup.
 
     Returns:
-        Dictionary of specification data from scip-atoms.
+        Dictionary of specification data from probe-verus.
 
     Raises:
-        SystemExit: If scip-atoms is not installed or fails to run.
+        SystemExit: If probe-verus is not installed or fails to run.
     """
-    check_scip_atoms_or_exit()
+    check_probe_verus_or_exit()
 
     specs_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Running scip-atoms specify on {project_root}...")
+    print(f"Running probe-verus specify on {project_root}...")
     result = subprocess.run(
-        ["scip-atoms", "specify", SCIP_PREFIX,
-         "--json-output", str(specs_path),
-         "--with-scip-names", str(atoms_path)],
+        ["probe-verus", "specify", str(project_root),
+         "-o", str(specs_path),
+         "-a", str(atoms_path)],
         cwd=project_root,
         capture_output=True,
         text=True,
     )
 
     if result.returncode != 0:
-        print("Error: scip-atoms specify failed.")
+        print("Error: probe-verus specify failed.")
         if result.stderr:
             print(result.stderr)
         raise SystemExit(1)
@@ -1603,19 +1603,19 @@ def get_functions_with_specs(specs_data: dict) -> dict[str, dict]:
     Filter specs data to only functions that have requires or ensures.
 
     Args:
-        specs_data: Dictionary from scip-atoms specify output.
+        specs_data: Dictionary from probe-verus specify output.
 
     Returns:
-        Dictionary mapping scip-name to spec data for functions with specs.
+        Dictionary mapping probe-name to spec data for functions with specs.
     """
     result = {}
 
-    for scip_name, func_info in specs_data.items():
+    for probe_name, func_info in specs_data.items():
         has_requires = func_info.get('has_requires', False)
         has_ensures = func_info.get('has_ensures', False)
 
         if has_requires or has_ensures:
-            result[scip_name] = func_info
+            result[probe_name] = func_info
 
     return result
 
@@ -1774,9 +1774,9 @@ def cmd_specify(args: argparse.Namespace) -> None:
         print(f"Found {len(functions_in_structure)} functions with specs in structure")
 
     else:
-        specs_path = verilib_path / "specification.json"
+        specs_path = verilib_path / "specs.json"
         atoms_path = verilib_path / "atoms.json"
-        specs_data = run_scip_specify(project_root, specs_path, atoms_path)
+        specs_data = run_probe_specify(project_root, specs_path, atoms_path)
 
         functions_with_specs = get_functions_with_specs(specs_data)
         print(f"\nFound {len(functions_with_specs)} functions with specs in codebase")
@@ -1787,9 +1787,9 @@ def cmd_specify(args: argparse.Namespace) -> None:
         print(f"Found {len(structure_names)} functions in structure")
 
         functions_in_structure = {
-            scip_name: spec_info
-            for scip_name, spec_info in functions_with_specs.items()
-            if scip_name in structure_names
+            probe_name: spec_info
+            for probe_name, spec_info in functions_with_specs.items()
+            if probe_name in structure_names
         }
         print(f"Found {len(functions_in_structure)} functions with specs in structure")
 
@@ -1830,43 +1830,43 @@ def cmd_specify(args: argparse.Namespace) -> None:
 # VERIFY SUBCOMMAND FUNCTIONS
 # =============================================================================
 
-def run_scip_verify(
+def run_probe_verify(
     project_root: Path,
-    verification_path: Path,
+    proofs_path: Path,
     atoms_path: Path,
     verify_only_module: str | None = None
 ) -> dict:
     """
-    Run scip-atoms verify and return the results.
+    Run probe-verus verify and return the results.
 
     Args:
         project_root: Root directory of the project to analyze.
-        verification_path: Path where verification.json will be written.
-        atoms_path: Path to atoms.json for scip-name lookup.
+        proofs_path: Path where proofs.json will be written.
+        atoms_path: Path to atoms.json for probe-name lookup.
         verify_only_module: Optional module name to verify only that module.
 
     Returns:
-        Dictionary of verification data from scip-atoms.
+        Dictionary of verification data from probe-verus.
 
     Raises:
-        SystemExit: If scip-atoms is not installed or fails to run.
+        SystemExit: If probe-verus is not installed or fails to run.
     """
-    check_scip_atoms_or_exit()
+    check_probe_verus_or_exit()
 
-    verification_path.parent.mkdir(parents=True, exist_ok=True)
+    proofs_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "scip-atoms", "verify", SCIP_PREFIX,
-        "--json-output", str(verification_path),
-        "--with-scip-names", str(atoms_path)
+        "probe-verus", "verify", str(project_root),
+        "-o", str(proofs_path),
+        "-a", str(atoms_path)
     ]
     if verify_only_module:
         cmd.extend(["--verify-only-module", verify_only_module])
 
     if verify_only_module:
-        print(f"Running scip-atoms verify on {project_root} (module: {verify_only_module})...")
+        print(f"Running probe-verus verify on {project_root} (module: {verify_only_module})...")
     else:
-        print(f"Running scip-atoms verify on {project_root}...")
+        print(f"Running probe-verus verify on {project_root}...")
 
     result = subprocess.run(
         cmd,
@@ -1876,12 +1876,12 @@ def run_scip_verify(
     )
 
     if result.returncode != 0:
-        print("Error: scip-atoms verify failed.")
+        print("Error: probe-verus verify failed.")
         if result.stderr:
             print(result.stderr)
         raise SystemExit(1)
 
-    print(f"Verification results saved to {verification_path}")
+    print(f"Verification results saved to {proofs_path}")
 
     # Clean up generated intermediate files
     for cleanup_file in ["data/verification_config.json", "data/verification_output.txt"]:
@@ -1893,33 +1893,39 @@ def run_scip_verify(
     if data_dir.exists() and data_dir.is_dir() and not any(data_dir.iterdir()):
         data_dir.rmdir()
 
-    with open(verification_path, encoding='utf-8') as f:
+    with open(proofs_path, encoding='utf-8') as f:
         return json.load(f)
 
 
-def get_verification_results(verification_data: dict) -> tuple[set[str], set[str]]:
+def get_verification_results(proofs_data: dict) -> tuple[set[str], set[str]]:
     """
-    Extract verified and failed function scip-names from verification data.
+    Extract verified and failed function probe-names from proofs data.
+
+    The proofs.json schema from probe-verus is a dictionary keyed by probe-name:
+    {
+        "probe:crate/version/module/function()": {
+            "code-path": "string",
+            "code-line": number,
+            "verified": boolean,
+            "status": "success|failure|sorries|warning"
+        }
+    }
 
     Args:
-        verification_data: Dictionary from scip-atoms verify output.
+        proofs_data: Dictionary from probe-verus verify output.
 
     Returns:
-        Tuple of (verified_scip_names, failed_scip_names).
+        Tuple of (verified_probe_names, failed_probe_names).
     """
-    verification = verification_data.get('verification', {})
-
     verified = set()
-    for func in verification.get('verified_functions', []):
-        scip_name = func.get('scip-name')
-        if scip_name:
-            verified.add(scip_name)
-
     failed = set()
-    for func in verification.get('failed_functions', []):
-        scip_name = func.get('scip-name')
-        if scip_name:
-            failed.add(scip_name)
+
+    for probe_name, func_data in proofs_data.items():
+        is_verified = func_data.get('verified', False)
+        if is_verified:
+            verified.add(probe_name)
+        else:
+            failed.add(probe_name)
 
     return verified, failed
 
@@ -2003,13 +2009,13 @@ def cmd_verify(args: argparse.Namespace) -> None:
         verified_funcs, failed_funcs = get_blueprint_verification_results(blueprint_path)
 
     elif structure_type == "dalek-lite":
-        verification_path = verilib_path / "verification.json"
+        proofs_path = verilib_path / "proofs.json"
         atoms_path = verilib_path / "atoms.json"
-        verification_data = run_scip_verify(
-            project_root, verification_path, atoms_path,
+        proofs_data = run_probe_verify(
+            project_root, proofs_path, atoms_path,
             verify_only_module=args.verify_only_module
         )
-        verified_funcs, failed_funcs = get_verification_results(verification_data)
+        verified_funcs, failed_funcs = get_verification_results(proofs_data)
 
     else:
         print(f"Error: Unknown structure type '{structure_type}'", file=sys.stderr)

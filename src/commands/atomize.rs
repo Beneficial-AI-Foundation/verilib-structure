@@ -2,9 +2,9 @@
 //!
 //! Enrich structure files with metadata from SCIP atoms or blueprint.
 
-use crate::config::constants::SCIP_PREFIX;
+use crate::config::constants::PROBE_PREFIX;
 use crate::config::ConfigPaths;
-use crate::utils::{check_scip_atoms_or_exit, parse_frontmatter, run_command};
+use crate::utils::{check_probe_verus_or_exit, parse_frontmatter, run_command};
 use crate::{StructureForm, StructureType};
 use anyhow::{bail, Context, Result};
 use intervaltree::IntervalTree;
@@ -244,9 +244,9 @@ fn run_dalek_atomize(
     config: &ConfigPaths,
     structure_form: StructureForm,
 ) -> Result<()> {
-    let scip_atoms = generate_scip_atoms(project_root, &config.atoms_path)?;
-    let scip_atoms = filter_scip_atoms(&scip_atoms, SCIP_PREFIX);
-    let scip_index = generate_scip_index(&scip_atoms);
+    let probe_atoms = generate_probe_atoms(project_root, &config.atoms_path)?;
+    let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
+    let probe_index = generate_probe_index(&probe_atoms);
 
     match structure_form {
         StructureForm::Json => {
@@ -258,15 +258,15 @@ fn run_dalek_atomize(
             let content = std::fs::read_to_string(&config.structure_json_path)?;
             let structure: HashMap<String, Value> = serde_json::from_str(&content)?;
 
-            println!("Syncing structure with SCIP atoms...");
-            let structure = sync_structure_json_with_atoms(structure, &scip_index, &scip_atoms)?;
+            println!("Syncing structure with probe atoms...");
+            let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
 
             println!("Saving updated structure to {}...", config.structure_json_path.display());
             let content = serde_json::to_string_pretty(&structure)?;
             std::fs::write(&config.structure_json_path, content)?;
 
             println!("Populating structure metadata...");
-            let metadata = populate_structure_json_metadata(&structure, &scip_atoms)?;
+            let metadata = populate_structure_json_metadata(&structure, &probe_atoms)?;
 
             println!("Saving metadata to {}...", config.structure_meta_path.display());
             let content = serde_json::to_string_pretty(&metadata)?;
@@ -275,13 +275,13 @@ fn run_dalek_atomize(
         }
         StructureForm::Files => {
             println!(
-                "Syncing structure files in {} with SCIP atoms...",
+                "Syncing structure files in {} with probe atoms...",
                 config.structure_root.display()
             );
-            sync_structure_files_with_atoms(&scip_index, &scip_atoms, &config.structure_root)?;
+            sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
 
             println!("Populating structure metadata files...");
-            populate_structure_files_metadata(&scip_atoms, &config.structure_root, project_root)?;
+            populate_structure_files_metadata(&probe_atoms, &config.structure_root, project_root)?;
             println!("Done.");
         }
     }
@@ -289,20 +289,20 @@ fn run_dalek_atomize(
     Ok(())
 }
 
-/// Run scip-atoms on the project and save results to atoms.json.
-fn generate_scip_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMap<String, Value>> {
-    check_scip_atoms_or_exit()?;
+/// Run probe-verus atomize on the project and save results to atoms.json.
+fn generate_probe_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMap<String, Value>> {
+    check_probe_verus_or_exit()?;
 
     if let Some(parent) = atoms_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    println!("Running scip-atoms on {}...", project_root.display());
+    println!("Running probe-verus atomize on {}...", project_root.display());
 
     let output = run_command(
-        "scip-atoms",
+        "probe-verus",
         &[
-            "atoms",
+            "atomize",
             project_root.to_str().unwrap(),
             "-o",
             atoms_path.to_str().unwrap(),
@@ -313,11 +313,11 @@ fn generate_scip_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMap
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Error: scip-atoms failed.");
+        eprintln!("Error: probe-verus atomize failed.");
         if !stderr.is_empty() {
             eprintln!("{}", stderr);
         }
-        bail!("scip-atoms failed");
+        bail!("probe-verus atomize failed");
     }
 
     // Clean up generated intermediate files
@@ -342,10 +342,10 @@ fn generate_scip_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMap
     Ok(atoms)
 }
 
-/// Filter SCIP atoms to only those where scip-name starts with prefix.
-fn filter_scip_atoms(scip_atoms: &HashMap<String, Value>, prefix: &str) -> HashMap<String, Value> {
-    let uri_prefix = format!("scip:{}/", prefix);
-    scip_atoms
+/// Filter probe atoms to only those where probe-name starts with prefix.
+fn filter_probe_atoms(probe_atoms: &HashMap<String, Value>, prefix: &str) -> HashMap<String, Value> {
+    let uri_prefix = format!("probe:{}/", prefix);
+    probe_atoms
         .iter()
         .filter(|(k, _)| k.starts_with(&uri_prefix))
         .map(|(k, v)| (k.clone(), v.clone()))
@@ -353,10 +353,10 @@ fn filter_scip_atoms(scip_atoms: &HashMap<String, Value>, prefix: &str) -> HashM
 }
 
 /// Build an interval tree index for fast line-based lookups.
-fn generate_scip_index(scip_atoms: &HashMap<String, Value>) -> HashMap<String, IntervalTree<u32, String>> {
+fn generate_probe_index(probe_atoms: &HashMap<String, Value>) -> HashMap<String, IntervalTree<u32, String>> {
     let mut trees: HashMap<String, Vec<(std::ops::Range<u32>, String)>> = HashMap::new();
 
-    for (scip_name, atom_data) in scip_atoms {
+    for (probe_name, atom_data) in probe_atoms {
         let code_path = match atom_data.get("code-path").and_then(|v| v.as_str()) {
             Some(p) => p.to_string(),
             None => continue,
@@ -380,7 +380,7 @@ fn generate_scip_index(scip_atoms: &HashMap<String, Value>) -> HashMap<String, I
         trees
             .entry(code_path)
             .or_default()
-            .push((lines_start..lines_end + 1, scip_name.clone()));
+            .push((lines_start..lines_end + 1, probe_name.clone()));
     }
 
     trees
@@ -389,21 +389,21 @@ fn generate_scip_index(scip_atoms: &HashMap<String, Value>) -> HashMap<String, I
         .collect()
 }
 
-/// Update a structure entry with SCIP atom data.
+/// Update a structure entry with probe atom data.
 fn update_entry_from_atoms(
     entry: &Value,
-    scip_index: &HashMap<String, IntervalTree<u32, String>>,
-    scip_atoms: &HashMap<String, Value>,
+    probe_index: &HashMap<String, IntervalTree<u32, String>>,
+    probe_atoms: &HashMap<String, Value>,
     context: &str,
 ) -> Result<(Value, Option<String>)> {
     let code_path = entry.get("code-path").and_then(|v| v.as_str());
     let line_start = entry.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
-    let existing_scip_name = entry.get("scip-name").and_then(|v| v.as_str());
+    let existing_probe_name = entry.get("scip-name").and_then(|v| v.as_str());
 
     let mut updated = entry.clone();
 
-    if let Some(scip_name) = existing_scip_name {
-        if let Some(atom) = scip_atoms.get(scip_name) {
+    if let Some(probe_name) = existing_probe_name {
+        if let Some(atom) = probe_atoms.get(probe_name) {
             let atom_code_path = atom.get("code-path").and_then(|v| v.as_str());
             let atom_code_text = atom.get("code-text");
             let atom_line_start = atom_code_text
@@ -439,8 +439,8 @@ fn update_entry_from_atoms(
             return Ok((updated, None));
         } else {
             eprintln!(
-                "WARNING: scip-name '{}' not found in scip_atoms for {}, looking up by code-path/code-line",
-                scip_name, context
+                "WARNING: scip-name '{}' not found in probe_atoms for {}, looking up by code-path/code-line",
+                probe_name, context
             );
         }
     }
@@ -456,12 +456,12 @@ fn update_entry_from_atoms(
         }
     };
 
-    let tree = match scip_index.get(code_path) {
+    let tree = match probe_index.get(code_path) {
         Some(t) => t,
         None => {
             return Ok((
                 updated,
-                Some(format!("code-path '{}' not found in scip_index", code_path)),
+                Some(format!("code-path '{}' not found in probe_index", code_path)),
             ));
         }
     };
@@ -488,26 +488,26 @@ fn update_entry_from_atoms(
         );
     }
 
-    let scip_name = &matching_intervals[0].value;
+    let probe_name = &matching_intervals[0].value;
     if let Some(obj) = updated.as_object_mut() {
-        obj.insert("scip-name".to_string(), json!(scip_name));
+        obj.insert("scip-name".to_string(), json!(probe_name));
     }
 
     Ok((updated, None))
 }
 
-/// Sync structure dictionary with SCIP atoms index.
+/// Sync structure dictionary with probe atoms index.
 fn sync_structure_json_with_atoms(
     structure: HashMap<String, Value>,
-    scip_index: &HashMap<String, IntervalTree<u32, String>>,
-    scip_atoms: &HashMap<String, Value>,
+    probe_index: &HashMap<String, IntervalTree<u32, String>>,
+    probe_atoms: &HashMap<String, Value>,
 ) -> Result<HashMap<String, Value>> {
     let mut updated_count = 0;
     let mut not_found_count = 0;
     let mut result = HashMap::new();
 
     for (file_path, entry) in structure {
-        let (updated, error) = update_entry_from_atoms(&entry, scip_index, scip_atoms, &file_path)?;
+        let (updated, error) = update_entry_from_atoms(&entry, probe_index, probe_atoms, &file_path)?;
 
         if let Some(err) = error {
             eprintln!("WARNING: {} for {}", err, file_path);
@@ -525,10 +525,10 @@ fn sync_structure_json_with_atoms(
     Ok(result)
 }
 
-/// Sync structure .md files with SCIP atoms index.
+/// Sync structure .md files with probe atoms index.
 fn sync_structure_files_with_atoms(
-    scip_index: &HashMap<String, IntervalTree<u32, String>>,
-    scip_atoms: &HashMap<String, Value>,
+    probe_index: &HashMap<String, IntervalTree<u32, String>>,
+    probe_atoms: &HashMap<String, Value>,
     structure_root: &Path,
 ) -> Result<()> {
     let mut updated_count = 0;
@@ -550,7 +550,7 @@ fn sync_structure_files_with_atoms(
 
         let entry_value = json!(frontmatter);
         let (updated, error) =
-            update_entry_from_atoms(&entry_value, scip_index, scip_atoms, &path.display().to_string())?;
+            update_entry_from_atoms(&entry_value, probe_index, probe_atoms, &path.display().to_string())?;
 
         if let Some(err) = error {
             eprintln!("WARNING: {} for {}", err, path.display());
@@ -583,12 +583,12 @@ fn sync_structure_files_with_atoms(
     Ok(())
 }
 
-/// Generate metadata from SCIP atom data.
+/// Generate metadata from probe atom data.
 fn generate_metadata_from_atom(
-    scip_name: &str,
-    scip_atoms: &HashMap<String, Value>,
+    probe_name: &str,
+    probe_atoms: &HashMap<String, Value>,
 ) -> Result<Option<Value>> {
-    let atom = match scip_atoms.get(scip_name) {
+    let atom = match probe_atoms.get(probe_name) {
         Some(a) => a,
         None => return Ok(None),
     };
@@ -639,14 +639,14 @@ fn generate_metadata_from_atom(
 /// Generate metadata dictionary from structure JSON.
 fn populate_structure_json_metadata(
     structure: &HashMap<String, Value>,
-    scip_atoms: &HashMap<String, Value>,
+    probe_atoms: &HashMap<String, Value>,
 ) -> Result<HashMap<String, Value>> {
     let mut result = HashMap::new();
     let mut created_count = 0;
     let mut skipped_count = 0;
 
     for (file_path, entry) in structure {
-        let scip_name = match entry.get("scip-name").and_then(|v| v.as_str()) {
+        let probe_name = match entry.get("scip-name").and_then(|v| v.as_str()) {
             Some(name) => name,
             None => {
                 eprintln!("WARNING: Missing or invalid scip-name for {}", file_path);
@@ -655,9 +655,9 @@ fn populate_structure_json_metadata(
             }
         };
 
-        match generate_metadata_from_atom(scip_name, scip_atoms)? {
+        match generate_metadata_from_atom(probe_name, probe_atoms)? {
             Some(meta_data) => {
-                result.insert(scip_name.to_string(), meta_data);
+                result.insert(probe_name.to_string(), meta_data);
                 created_count += 1;
             }
             None => {
@@ -675,7 +675,7 @@ fn populate_structure_json_metadata(
 
 /// Generate metadata files for each structure .md file.
 fn populate_structure_files_metadata(
-    scip_atoms: &HashMap<String, Value>,
+    probe_atoms: &HashMap<String, Value>,
     structure_root: &Path,
     project_root: &Path,
 ) -> Result<()> {
@@ -699,7 +699,7 @@ fn populate_structure_files_metadata(
             }
         };
 
-        let scip_name = match frontmatter.get("scip-name").and_then(|v| v.as_str()) {
+        let probe_name = match frontmatter.get("scip-name").and_then(|v| v.as_str()) {
             Some(name) => name,
             None => {
                 eprintln!("WARNING: Missing scip-name for {}", path.display());
@@ -708,10 +708,10 @@ fn populate_structure_files_metadata(
             }
         };
 
-        let meta_data = match generate_metadata_from_atom(scip_name, scip_atoms)? {
+        let meta_data = match generate_metadata_from_atom(probe_name, probe_atoms)? {
             Some(mut md) => {
                 if let Some(obj) = md.as_object_mut() {
-                    obj.insert("scip-name".to_string(), json!(scip_name));
+                    obj.insert("scip-name".to_string(), json!(probe_name));
                 }
                 md
             }

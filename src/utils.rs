@@ -1,6 +1,6 @@
 //! Utility functions for verilib structure.
 
-use crate::config::constants::SCIP_ATOMS_REPO;
+use crate::config::constants::PROBE_VERUS_REPO;
 use crate::{StructureForm, StructureType};
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
@@ -32,22 +32,22 @@ pub fn decode_name(encoded: &str) -> String {
         .to_string()
 }
 
-/// Check if scip-atoms is installed
-pub fn check_scip_atoms_installed() -> bool {
-    which::which("scip-atoms").is_ok()
+/// Check if probe-verus is installed
+pub fn check_probe_verus_installed() -> bool {
+    which::which("probe-verus").is_ok()
 }
 
-/// Check if scip-atoms is installed, exit with instructions if not.
-pub fn check_scip_atoms_or_exit() -> Result<()> {
-    if !check_scip_atoms_installed() {
-        eprintln!("Error: scip-atoms is not installed.");
-        eprintln!("Please visit {} for installation instructions.", SCIP_ATOMS_REPO);
+/// Check if probe-verus is installed, exit with instructions if not.
+pub fn check_probe_verus_or_exit() -> Result<()> {
+    if !check_probe_verus_installed() {
+        eprintln!("Error: probe-verus is not installed.");
+        eprintln!("Please visit {} for installation instructions.", PROBE_VERUS_REPO);
         eprintln!();
         eprintln!("Quick install:");
-        eprintln!("  git clone {}", SCIP_ATOMS_REPO);
-        eprintln!("  cd scip-atoms");
+        eprintln!("  git clone {}", PROBE_VERUS_REPO);
+        eprintln!("  cd probe-verus");
         eprintln!("  cargo install --path .");
-        bail!("scip-atoms not installed");
+        bail!("probe-verus not installed");
     }
     Ok(())
 }
