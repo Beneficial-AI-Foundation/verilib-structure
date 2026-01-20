@@ -1194,6 +1194,7 @@ def _generate_enriched_entry(
 
 def populate_structure_files_metadata(
     probe_atoms: dict[str, dict],
+    probe_index: dict[str, IntervalTree],
     structure_root: Path,
     project_root: Path
 ) -> None:
@@ -1204,6 +1205,30 @@ def populate_structure_files_metadata(
     for md_file in structure_root.rglob("*.md"):
         post = frontmatter.load(md_file)
         probe_name = post.get('code-name')
+
+        # If code-name is missing, look it up from probe_index
+        if not probe_name:
+            code_path = post.get('code-path')
+            line_start = post.get('code-line')
+
+            if code_path and line_start is not None:
+                if code_path in probe_index:
+                    tree = probe_index[code_path]
+                    exact_matches = [iv for iv in tree[line_start] if iv.begin == line_start]
+                    if exact_matches:
+                        probe_name = exact_matches[0].data
+                    else:
+                        print(f"WARNING: No atom found at {code_path}:{line_start} for {md_file}")
+                        skipped_count += 1
+                        continue
+                else:
+                    print(f"WARNING: code-path '{code_path}' not in probe_index for {md_file}")
+                    skipped_count += 1
+                    continue
+            else:
+                print(f"WARNING: Missing code-name and code-path/code-line for {md_file}")
+                skipped_count += 1
+                continue
 
         enriched_entry, error = _generate_enriched_entry(probe_name, probe_atoms)
 
@@ -1489,6 +1514,7 @@ def cmd_atomize(args: argparse.Namespace) -> None:
     Update verilib structure by syncing with atoms.
     """
     project_root = args.project_root.resolve()
+    update_stubs = args.update_stubs
     config = load_config(project_root)
 
     structure_type = config.get("structure-type")
@@ -1557,11 +1583,12 @@ def cmd_atomize(args: argparse.Namespace) -> None:
             print("Done.")
 
         elif structure_form == "files":
-            print(f"Syncing structure files in {structure_root} with probe atoms...")
-            sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
+            if update_stubs:
+                print(f"Syncing structure files in {structure_root} with probe atoms...")
+                sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
 
             print("Populating structure metadata files...")
-            populate_structure_files_metadata(probe_atoms, structure_root, project_root)
+            populate_structure_files_metadata(probe_atoms, probe_index, structure_root, project_root)
             print("Done.")
 
     else:
@@ -2174,6 +2201,12 @@ Examples:
         nargs="?",
         default=Path.cwd(),
         help="Project root directory (default: current working directory)"
+    )
+    atomize_parser.add_argument(
+        "-s", "--update-stubs",
+        action="store_true",
+        dest="update_stubs",
+        help="Update structure files (.md or stubs.json) with code-name from atoms"
     )
 
     # Specify subcommand

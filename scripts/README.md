@@ -139,7 +139,7 @@ dependencies: [veri:dep1, veri:dep2]
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `probe-verus` to generate SCIP data, syncs structure with `code-name` identifiers
+- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, enriches structure with metadata
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
 **Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
@@ -147,7 +147,7 @@ Enriches structure files with metadata. Behavior depends on structure type:
 **Usage:**
 
 ```bash
-uv run scripts/structure.py atomize [project_root]
+uv run scripts/structure.py atomize [project_root] [--update-stubs]
 ```
 
 **Arguments:**
@@ -155,6 +155,12 @@ uv run scripts/structure.py atomize [project_root]
 | Argument | Description |
 |----------|-------------|
 | `project_root` | Project root directory (default: current working directory) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-s`, `--update-stubs` | Update structure files (.md or stubs.json) with code-name from atoms |
 
 **Structure forms (from config):**
 
@@ -164,8 +170,11 @@ uv run scripts/structure.py atomize [project_root]
 **Examples:**
 
 ```bash
-# Update structure and generate metadata (current directory)
+# Generate metadata files (current directory)
 uv run scripts/structure.py atomize
+
+# Also update .md files with code-name
+uv run scripts/structure.py atomize --update-stubs
 
 # Update structure for a specific project
 uv run scripts/structure.py atomize /path/to/project

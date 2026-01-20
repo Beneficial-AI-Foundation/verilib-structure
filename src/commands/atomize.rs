@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Run the atomize subcommand.
-pub fn run(project_root: PathBuf) -> Result<()> {
+pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
     let project_root = project_root.canonicalize()
         .context("Failed to resolve project root")?;
     let config = ConfigPaths::load(&project_root)?;
@@ -26,7 +26,7 @@ pub fn run(project_root: PathBuf) -> Result<()> {
             run_blueprint_atomize(&config, structure_form)?;
         }
         StructureType::DalekLite => {
-            run_dalek_atomize(&project_root, &config, structure_form)?;
+            run_dalek_atomize(&project_root, &config, structure_form, update_stubs)?;
         }
     }
 
@@ -243,6 +243,7 @@ fn run_dalek_atomize(
     project_root: &Path,
     config: &ConfigPaths,
     structure_form: StructureForm,
+    update_stubs: bool,
 ) -> Result<()> {
     let probe_atoms = generate_probe_atoms(project_root, &config.atoms_path)?;
     let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
@@ -258,6 +259,7 @@ fn run_dalek_atomize(
             let content = std::fs::read_to_string(&config.structure_json_path)?;
             let structure: HashMap<String, Value> = serde_json::from_str(&content)?;
 
+            // Sync to get code-names (in memory)
             println!("Syncing structure with probe atoms...");
             let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
 
@@ -270,14 +272,16 @@ fn run_dalek_atomize(
             println!("Done.");
         }
         StructureForm::Files => {
-            println!(
-                "Syncing structure files in {} with probe atoms...",
-                config.structure_root.display()
-            );
-            sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
+            if update_stubs {
+                println!(
+                    "Syncing structure files in {} with probe atoms...",
+                    config.structure_root.display()
+                );
+                sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
+            }
 
             println!("Populating structure metadata files...");
-            populate_structure_files_metadata(&probe_atoms, &config.structure_root, project_root)?;
+            populate_structure_files_metadata(&probe_atoms, &probe_index, &config.structure_root, project_root)?;
             println!("Done.");
         }
     }
@@ -683,6 +687,7 @@ fn enrich_structure_json(
 /// Generate metadata files for each structure .md file.
 fn populate_structure_files_metadata(
     probe_atoms: &HashMap<String, Value>,
+    probe_index: &HashMap<String, IntervalTree<u32, String>>,
     structure_root: &Path,
     project_root: &Path,
 ) -> Result<()> {
@@ -706,16 +711,44 @@ fn populate_structure_files_metadata(
             }
         };
 
-        let probe_name = match frontmatter.get("code-name").and_then(|v| v.as_str()) {
-            Some(name) => name,
+        // Try to get code-name from frontmatter, or look it up from probe_index
+        let probe_name: String = match frontmatter.get("code-name").and_then(|v| v.as_str()) {
+            Some(name) => name.to_string(),
             None => {
-                eprintln!("WARNING: Missing code-name for {}", path.display());
-                skipped_count += 1;
-                continue;
+                // Look up code-name from probe_index using code-path and code-line
+                let code_path = frontmatter.get("code-path").and_then(|v| v.as_str());
+                let line_start = frontmatter.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
+
+                match (code_path, line_start) {
+                    (Some(cp), Some(ls)) => {
+                        if let Some(tree) = probe_index.get(cp) {
+                            let matching: Vec<_> = tree
+                                .query(ls..ls + 1)
+                                .filter(|iv| iv.range.start == ls)
+                                .collect();
+                            if !matching.is_empty() {
+                                matching[0].value.clone()
+                            } else {
+                                eprintln!("WARNING: No atom found at {}:{} for {}", cp, ls, path.display());
+                                skipped_count += 1;
+                                continue;
+                            }
+                        } else {
+                            eprintln!("WARNING: code-path '{}' not in probe_index for {}", cp, path.display());
+                            skipped_count += 1;
+                            continue;
+                        }
+                    }
+                    _ => {
+                        eprintln!("WARNING: Missing code-name and code-path/code-line for {}", path.display());
+                        skipped_count += 1;
+                        continue;
+                    }
+                }
             }
         };
 
-        let meta_data = match generate_enriched_entry(probe_name, probe_atoms)? {
+        let meta_data = match generate_enriched_entry(&probe_name, probe_atoms)? {
             Some(md) => md,
             None => {
                 eprintln!("WARNING: Missing code-path or line info for {}", path.display());

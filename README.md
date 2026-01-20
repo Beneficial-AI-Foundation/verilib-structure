@@ -166,7 +166,7 @@ dependencies: [veri:dep1, veri:dep2]
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, syncs structure with `code-name` identifiers
+- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, enriches structure with metadata
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
 **Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
@@ -174,7 +174,7 @@ Enriches structure files with metadata. Behavior depends on structure type:
 **Usage:**
 
 ```bash
-verilib-structure atomize [PROJECT_ROOT]
+verilib-structure atomize [PROJECT_ROOT] [--update-stubs]
 ```
 
 **Arguments:**
@@ -182,6 +182,12 @@ verilib-structure atomize [PROJECT_ROOT]
 | Argument | Description |
 |----------|-------------|
 | `PROJECT_ROOT` | Project root directory (default: current working directory) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-s`, `--update-stubs` | Update structure files (.md or stubs.json) with code-name from atoms |
 
 **Structure forms (from config):**
 
@@ -191,8 +197,11 @@ verilib-structure atomize [PROJECT_ROOT]
 **Examples:**
 
 ```bash
-# Update structure and generate metadata (current directory)
+# Generate metadata files (current directory)
 verilib-structure atomize
+
+# Also update .md files with code-name
+verilib-structure atomize --update-stubs
 
 # Update structure for a specific project
 verilib-structure atomize /path/to/project

@@ -51,6 +51,10 @@ enum Commands {
         /// Project root directory (default: current working directory)
         #[arg(default_value = ".")]
         project_root: PathBuf,
+
+        /// Update structure files (.md or stubs.json) with code-name from atoms
+        #[arg(short = 's', long)]
+        update_stubs: bool,
     },
 
     /// Check specification status and manage spec certs
@@ -117,7 +121,7 @@ fn main() -> Result<()> {
             root,
         } => commands::create::run(project_root, structure_type, form, root),
 
-        Commands::Atomize { project_root } => commands::atomize::run(project_root),
+        Commands::Atomize { project_root, update_stubs } => commands::atomize::run(project_root, update_stubs),
 
         Commands::Specify { project_root } => commands::specify::run(project_root),
 
