@@ -1,0 +1,55 @@
+[package]
+name = "verilib-structure"
+version = "0.1.0"
+edition = "2021"
+description = "CLI toolkit for managing formal verification workflows"
+license = "MIT"
+repository = "https://github.com/Beneficial-AI-Foundation/verilib-structure"
+
+[dependencies]
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+# HTML parsing
+scraper = "0.20"
+
+# URL encoding/decoding
+percent-encoding = "2"
+
+# File system operations
+walkdir = "2"
+glob = "0.3"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async runtime (for reqwest)
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Regex for parsing
+regex = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# CSV parsing
+csv = "1"
+
+# Interval tree
+intervaltree = "0.2"
+
+# Command lookup
+which = "7"
+
+[[bin]]
+name = "verilib-structure"
+path = "src/main.rs"

@@ -1,18 +1,14 @@
 # verilib-structure
-
 Verilib structure files for outlining verification goals
 
 ## Installation
 
-### Prerequisites
-
-1. Install dependencies for Blueprint (if using blueprint type).
+1. Install dependencies for Blueprint.
    ```
    apt install libgraphviz-dev graphviz
-   pip install leanblueprint
    ```
 
-2. Install proof tools: Verus, Verus Analyzer, SCIP (if using dalek-lite type).
+2. Install proof tools: Verus, Verus Analyzer, SCIP.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/installers_for_various_tools
    cd installers_for_various_tools
@@ -21,36 +17,25 @@ Verilib structure files for outlining verification goals
    python3 scip_installer.py
    ```
 
-3. Install atomization and verification tool (if using dalek-lite type).
+3. Install atomization and verification tool.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/scip-atoms
    cd scip-atoms
    cargo install --path .
    ```
 
-### Install verilib-structure
-
-**From source:**
-
-```bash
-git clone git@github.com:Beneficial-AI-Foundation/verilib-structure.git
-cd verilib-structure
-cargo install --path .
-```
-
-This installs the `verilib-structure` binary to `~/.cargo/bin/`.
-
-**Development build:**
-
-```bash
-cargo build --release
-# Binary available at ./target/release/verilib-structure
-```
+4. Install Structure.
+   ```
+   git clone git@github.com:Beneficial-AI-Foundation/verilib-structure.git
+   export VERILIB_STRUCTURE_PATH=$(pwd)/verilib-structure
+   ```
 
 ## Usage
 
+The main script `structure.py` provides four subcommands:
+
 ```bash
-verilib-structure <command> [options]
+uv run scripts/structure.py <command> [options]
 ```
 
 | Command | Description |
@@ -70,14 +55,14 @@ Generates structure files from source analysis. Supports two structure types:
 **Usage:**
 
 ```bash
-verilib-structure create [PROJECT_ROOT] --type <type> [--form <form>] [--root <root>]
+uv run scripts/structure.py create [project_root] --type <type> [--form <form>] [--root <root>]
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `PROJECT_ROOT` | Project root directory (default: current working directory) |
+| `project_root` | Project root directory (default: current working directory) |
 
 **Options:**
 
@@ -107,16 +92,16 @@ Creates `<project_root>/.verilib/config.json` with:
 
 ```bash
 # Dalek-lite: Generate JSON structure file
-verilib-structure create --type dalek-lite --form json
+uv run scripts/structure.py create --type dalek-lite --form json
 
 # Dalek-lite: Generate .md file hierarchy
-verilib-structure create --type dalek-lite --form files
+uv run scripts/structure.py create --type dalek-lite --form files
 
 # Blueprint: Generate JSON structure file (default)
-verilib-structure create --type blueprint
+uv run scripts/structure.py create --type blueprint
 
 # Blueprint: Generate .md file hierarchy
-verilib-structure create --type blueprint --form files
+uv run scripts/structure.py create --type blueprint --form files
 ```
 
 **Generated file format (dalek-lite):**
@@ -151,14 +136,14 @@ Enriches structure files with metadata. Behavior depends on structure type:
 **Usage:**
 
 ```bash
-verilib-structure atomize [PROJECT_ROOT]
+uv run scripts/structure.py atomize [project_root]
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `PROJECT_ROOT` | Project root directory (default: current working directory) |
+| `project_root` | Project root directory (default: current working directory) |
 
 **Structure forms (from config):**
 
@@ -169,10 +154,10 @@ verilib-structure atomize [PROJECT_ROOT]
 
 ```bash
 # Update structure and generate metadata (current directory)
-verilib-structure atomize
+uv run scripts/structure.py atomize
 
 # Update structure for a specific project
-verilib-structure atomize /path/to/project
+uv run scripts/structure.py atomize /path/to/project
 ```
 
 **Generated metadata format (dalek-lite):**
@@ -220,14 +205,14 @@ Checks specification status and manages specification certs. Behavior depends on
 **Usage:**
 
 ```bash
-verilib-structure specify [PROJECT_ROOT]
+uv run scripts/structure.py specify [project_root]
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `PROJECT_ROOT` | Project root directory (default: current working directory) |
+| `project_root` | Project root directory (default: current working directory) |
 
 **Workflow:**
 
@@ -255,10 +240,10 @@ Certs are stored in `.verilib/certs/specify/` with one JSON file per certified f
 
 ```bash
 # Check and certify specs (current directory)
-verilib-structure specify
+uv run scripts/structure.py specify
 
 # Check and certify specs for a specific project
-verilib-structure specify /path/to/project
+uv run scripts/structure.py specify /path/to/project
 ```
 
 **Interactive selection:**
@@ -279,14 +264,14 @@ Runs verification and automatically manages verification certs. Behavior depends
 **Usage:**
 
 ```bash
-verilib-structure verify [PROJECT_ROOT] [--verify-only-module <module>]
+uv run scripts/structure.py verify [project_root] [--verify-only-module <module>]
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `PROJECT_ROOT` | Project root directory (default: current working directory) |
+| `project_root` | Project root directory (default: current working directory) |
 
 **Options:**
 
@@ -322,18 +307,18 @@ Certs are stored in `.verilib/certs/verify/` with one JSON file per verified fun
 
 ```bash
 # Run verification and update certs (current directory)
-verilib-structure verify
+uv run scripts/structure.py verify
 
 # Run verification for a specific project
-verilib-structure verify /path/to/project
+uv run scripts/structure.py verify /path/to/project
 
 # Run verification for only the edwards module (dalek-lite only)
-verilib-structure verify --verify-only-module edwards
+uv run scripts/structure.py verify --verify-only-module edwards
 ```
 
 **Output:**
 
-The command shows a summary of changes:
+The script shows a summary of changes:
 ```
 ============================================================
 VERIFICATION CERT CHANGES
@@ -356,6 +341,7 @@ Total certs: 10 → 13
 
 ## Case Studies
 
+
 ### Dalek-Lite
 
 1. Create structure files
@@ -363,22 +349,22 @@ Total certs: 10 → 13
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
-   verilib-structure create --type dalek-lite --form files
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type dalek-lite --form files
    ```
 
 2. Run atomization checks
    ```
-   verilib-structure atomize
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py atomize
    ```
 
 3. Run specification checks
    ```
-   verilib-structure specify
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py specify
    ```
 
 4. Run verification checks
    ```
-   verilib-structure verify
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py verify
    ```
 
 ### Blueprint (Equational Theories)
@@ -387,50 +373,20 @@ Total certs: 10 → 13
    ```
    git clone git@github.com:Beneficial-AI-Foundation/equational_theories.git
    cd equational_theories
-   verilib-structure create --type blueprint
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type blueprint
    ```
 
 2. Run atomization checks
    ```
-   verilib-structure atomize
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py atomize
    ```
 
 3. Run specification checks
    ```
-   verilib-structure specify
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py specify
    ```
 
 4. Run verification checks
    ```
-   verilib-structure verify
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py verify
    ```
-
-## Building from Source
-
-**Requirements:**
-- Rust 1.70 or later
-- OpenSSL development libraries (`libssl-dev` on Ubuntu/Debian)
-
-**Build commands:**
-
-```bash
-# Debug build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# Install to ~/.cargo/bin
-cargo install --path .
-
-# Run tests
-cargo test
-
-# Run with cargo (without installing)
-cargo run -- --help
-cargo run -- create --type blueprint
-```
-
-## License
-
-MIT

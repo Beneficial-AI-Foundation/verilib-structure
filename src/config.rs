@@ -1,0 +1,133 @@
+//! Configuration management for verilib structure.
+
+use crate::{StructureForm, StructureType};
+use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+/// Configuration stored in .verilib/config.json
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(rename = "structure-type")]
+    pub structure_type: String,
+
+    #[serde(rename = "structure-form")]
+    pub structure_form: String,
+
+    #[serde(rename = "structure-root")]
+    pub structure_root: String,
+}
+
+/// Computed paths derived from config
+#[derive(Debug, Clone)]
+pub struct ConfigPaths {
+    pub config: Config,
+    pub verilib_path: PathBuf,
+    pub structure_root: PathBuf,
+    pub structure_json_path: PathBuf,
+    pub structure_meta_path: PathBuf,
+    pub blueprint_json_path: PathBuf,
+    pub atoms_path: PathBuf,
+    pub certs_specify_dir: PathBuf,
+    pub certs_verify_dir: PathBuf,
+}
+
+impl Config {
+    /// Create a new config with the given parameters
+    pub fn new(structure_type: StructureType, form: StructureForm, root: &str) -> Self {
+        Self {
+            structure_type: structure_type.to_string(),
+            structure_form: form.to_string(),
+            structure_root: root.to_string(),
+        }
+    }
+
+    /// Save config to .verilib/config.json
+    pub fn save(&self, project_root: &Path) -> Result<PathBuf> {
+        let verilib_path = project_root.join(".verilib");
+        std::fs::create_dir_all(&verilib_path)
+            .context("Failed to create .verilib directory")?;
+
+        let config_path = verilib_path.join("config.json");
+        let content = serde_json::to_string_pretty(self)
+            .context("Failed to serialize config")?;
+
+        std::fs::write(&config_path, content)
+            .context("Failed to write config.json")?;
+
+        Ok(config_path)
+    }
+
+    /// Get the structure type enum
+    pub fn get_structure_type(&self) -> Result<StructureType> {
+        match self.structure_type.as_str() {
+            "dalek-lite" => Ok(StructureType::DalekLite),
+            "blueprint" => Ok(StructureType::Blueprint),
+            other => bail!("Unknown structure type: {}", other),
+        }
+    }
+
+    /// Get the structure form enum
+    pub fn get_structure_form(&self) -> Result<StructureForm> {
+        match self.structure_form.as_str() {
+            "json" => Ok(StructureForm::Json),
+            "files" => Ok(StructureForm::Files),
+            other => bail!("Unknown structure form: {}", other),
+        }
+    }
+}
+
+impl ConfigPaths {
+    /// Load config and compute all paths
+    pub fn load(project_root: &Path) -> Result<Self> {
+        let verilib_path = project_root.join(".verilib");
+        let config_path = verilib_path.join("config.json");
+
+        if !config_path.exists() {
+            bail!(
+                "{} not found. Run 'verilib-structure create' first.",
+                config_path.display()
+            );
+        }
+
+        let content = std::fs::read_to_string(&config_path)
+            .context("Failed to read config.json")?;
+
+        let config: Config = serde_json::from_str(&content)
+            .context("Failed to parse config.json")?;
+
+        // Validate form
+        if config.structure_form != "json" && config.structure_form != "files" {
+            bail!("Unknown form '{}' in config", config.structure_form);
+        }
+
+        let structure_root = project_root.join(&config.structure_root);
+
+        Ok(Self {
+            config,
+            structure_root,
+            structure_json_path: verilib_path.join("structure_files.json"),
+            structure_meta_path: verilib_path.join("structure_meta.json"),
+            blueprint_json_path: verilib_path.join("blueprint.json"),
+            atoms_path: verilib_path.join("atoms.json"),
+            certs_specify_dir: verilib_path.join("certs").join("specify"),
+            certs_verify_dir: verilib_path.join("certs").join("verify"),
+            verilib_path,
+        })
+    }
+}
+
+/// Constants used throughout the application
+pub mod constants {
+    /// Repository for scip-atoms installation instructions
+    pub const SCIP_ATOMS_REPO: &str = "https://github.com/Beneficial-AI-Foundation/scip-atoms";
+
+    /// SCIP prefix for filtering atoms
+    pub const SCIP_PREFIX: &str = "curve25519-dalek";
+
+    /// Type-status values that indicate a function has a spec (blueprint)
+    pub const BLUEPRINT_SPEC_STATUSES: &[&str] = &["stated", "mathlib"];
+
+    /// Term-status values that indicate a function is verified (blueprint)
+    pub const BLUEPRINT_VERIFIED_STATUSES: &[&str] = &["fully-proved"];
+}
