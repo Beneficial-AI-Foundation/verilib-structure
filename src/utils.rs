@@ -1,6 +1,5 @@
 //! General utility functions for verilib structure.
 
-use crate::frontmatter;
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -21,32 +20,6 @@ pub fn run_command(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<s
         .output()
         .context(format!("Failed to run {}", program))?;
     Ok(output)
-}
-
-/// Get the set of code-name identifiers from the structure files.
-pub fn get_structure_names(structure_root: &Path) -> Result<HashSet<String>> {
-    let mut names = HashSet::new();
-
-    if !structure_root.exists() {
-        eprintln!("Warning: {} not found", structure_root.display());
-        return Ok(names);
-    }
-
-    for entry in walkdir::WalkDir::new(structure_root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "md") {
-            if let Ok(fm) = frontmatter::parse(path) {
-                if let Some(name) = fm.get("code-name").and_then(|v| v.as_str()) {
-                    names.insert(name.to_string());
-                }
-            }
-        }
-    }
-
-    Ok(names)
 }
 
 /// Display a multiple choice menu and get user selections.
