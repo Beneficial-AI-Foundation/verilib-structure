@@ -165,10 +165,10 @@ For blueprint projects, generates `<project_root>/.verilib/blueprint.json` by:
 
 ## atomize
 
-Enriches structure files with metadata. Behavior depends on structure type:
+Generate `stubs.json` file with molecular structure and atom metadata. Optionally, the `.md` stub files can be updated with the `code-name` computed from the `code-path` and `code-line`. Behavior depends on structure type:
 
-- **dalek-lite**: Runs `probe-verus atomize` to generate atom data, enriches structure with metadata
-- **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
+- **dalek-lite**: Runs `probe-verus atomize` to generate atom metadata
+- **blueprint**: Reads `blueprint.json` to generate atom metadata
 
 **Note:** Requires `config.json` created by `create`. The type is read from `structure-type` field in the config file.
 
