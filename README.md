@@ -120,7 +120,14 @@ code-name: null
 
 Generate `stubs.json` file with the molecular structure and enrich it with atom metadata. Optionally, the `.md` stub files can be updated with the stable `code-name` replacing the brittle `code-path` and `code-line` fields.
 
-Runs `probe-verus stubify` to generate `stubs.json` and `probe-verus atomize` to generate atom metadata.
+**Workflow:**
+
+1. Runs `probe-verus stubify` to generate initial `stubs.json` from `.md` files
+2. Runs `probe-verus atomize` to generate `atoms.json` with full atom metadata
+3. For each entry in `stubs.json`:
+   - Computes `code-name` from `code-path` and `code-line`
+   - Appends all metadata from `atoms.json` for this `code-name`
+4. Saves the enriched `stubs.json`
 
 **Note:** Requires `config.json` created by `create` to get `structure-root`.
 
