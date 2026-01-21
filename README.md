@@ -107,6 +107,32 @@ stubs.json
 proofs.json
 ```
 
+**Blueprint data file (blueprint type only):**
+
+For blueprint projects, generates `<project_root>/.verilib/blueprint.json` by:
+1. Running `leanblueprint web` to generate `blueprint/web/`
+2. Parsing `blueprint/web/dep_graph_document.html`
+3. Extracting node metadata from the dependency graph
+
+```json
+{
+  "node_id": {
+    "kind": "theorem",
+    "type-status": "stated",
+    "term-status": "fully-proved",
+    "type-dependencies": ["dep1", "dep2"],
+    "term-dependencies": ["dep3"],
+    "content": "<html content>"
+  }
+}
+```
+
+| Field | Values |
+|-------|--------|
+| `kind` | `theorem`, `definition` |
+| `type-status` | `stated`, `can-state`, `not-ready`, `mathlib` |
+| `term-status` | `fully-proved`, `proved`, `defined`, `can-prove` |
+
 **Examples:**
 
 ```bash
@@ -201,8 +227,7 @@ verilib-structure atomize /path/to/project
 ```json
 {
   "veri:node_id": {
-    "dependencies": ["veri:dep1", "veri:dep2"],
-    "visible": true
+    "dependencies": ["veri:dep1", "veri:dep2"]
   }
 }
 ```

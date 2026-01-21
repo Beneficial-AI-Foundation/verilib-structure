@@ -1240,7 +1240,6 @@ def populate_blueprint_json_metadata(
 
         meta_data = {
             "dependencies": all_deps,
-            "visible": True
         }
 
         result[veri_name] = meta_data

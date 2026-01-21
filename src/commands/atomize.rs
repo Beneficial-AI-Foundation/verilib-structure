@@ -145,7 +145,6 @@ fn populate_blueprint_json_metadata(
             veri_name.to_string(),
             json!({
                 "dependencies": all_deps,
-                "visible": true,
             }),
         );
         created_count += 1;
