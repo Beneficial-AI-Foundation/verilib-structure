@@ -7,8 +7,11 @@
 //! - `specify`  - Check specification status and manage spec certs
 //! - `verify`   - Run verification and manage verification certs
 
+mod certs;
 mod commands;
 mod config;
+mod frontmatter;
+mod probe;
 mod utils;
 
 use anyhow::Result;
@@ -72,15 +75,12 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Create {
+        Commands::Create { project_root, root } => commands::create::run(project_root, root),
+        Commands::Atomize {
             project_root,
-            root,
-        } => commands::create::run(project_root, root),
-
-        Commands::Atomize { project_root, update_stubs } => commands::atomize::run(project_root, update_stubs),
-
+            update_stubs,
+        } => commands::atomize::run(project_root, update_stubs),
         Commands::Specify { project_root } => commands::specify::run(project_root),
-
         Commands::Verify {
             project_root,
             verify_only_module,

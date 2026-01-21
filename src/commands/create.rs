@@ -3,18 +3,17 @@
 //! Initialize structure files from source analysis.
 
 use crate::config::Config;
-use crate::utils::{parse_github_link, run_command, write_frontmatter_file};
+use crate::frontmatter;
+use crate::utils::{parse_github_link, run_command};
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Run the create subcommand.
-pub fn run(
-    project_root: PathBuf,
-    root: Option<PathBuf>,
-) -> Result<()> {
-    let project_root = project_root.canonicalize()
+pub fn run(project_root: PathBuf, root: Option<PathBuf>) -> Result<()> {
+    let project_root = project_root
+        .canonicalize()
         .context("Failed to resolve project root")?;
     let verilib_path = project_root.join(".verilib");
 
@@ -31,7 +30,7 @@ pub fn run(
     run_analyze_verus_specs_proofs(&project_root, &tracked_path, &tracked_output_path)?;
 
     let tracked = read_tracked_csv(&tracked_output_path)?;
-    let tracked = tweak_disambiguate(tracked);
+    let tracked = disambiguate_names(tracked);
     let structure = tracked_to_structure(&tracked);
 
     // Write config file
@@ -53,16 +52,16 @@ fn run_analyze_verus_specs_proofs(
     seed_path: &Path,
     output_path: &Path,
 ) -> Result<()> {
-    let script_path = project_root.join("scripts").join("analyze_verus_specs_proofs.py");
+    let script_path = project_root
+        .join("scripts")
+        .join("analyze_verus_specs_proofs.py");
     if !script_path.exists() {
         bail!("Script not found: {}", script_path.display());
     }
 
     println!("Running analyze_verus_specs_proofs.py...");
 
-    let seed_relative = seed_path
-        .strip_prefix(project_root)
-        .unwrap_or(seed_path);
+    let seed_relative = seed_path.strip_prefix(project_root).unwrap_or(seed_path);
     let output_relative = output_path
         .strip_prefix(project_root)
         .unwrap_or(output_path);
@@ -91,21 +90,17 @@ fn run_analyze_verus_specs_proofs(
         bail!("analyze_verus_specs_proofs.py failed");
     }
 
-    println!("Generated tracked functions CSV at {}", output_path.display());
+    println!(
+        "Generated tracked functions CSV at {}",
+        output_path.display()
+    );
     Ok(())
 }
 
-/// Tracked function data.
+/// Tracked function data from CSV.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct TrackedFunction {
-    has_spec: bool,
-    has_proof: bool,
-    is_external_body: bool,
-    line_number: u32,
     link: String,
-    function: String,
-    module: String,
     qualified_name: String,
 }
 
@@ -119,32 +114,12 @@ fn read_tracked_csv(csv_path: &Path) -> Result<HashMap<String, TrackedFunction>>
         let function = record.get(0).unwrap_or("").to_string();
         let module = record.get(1).unwrap_or("").to_string();
         let link = record.get(2).unwrap_or("").to_string();
-        let has_spec_val = record.get(3).unwrap_or("");
-        let has_proof_val = record.get(4).unwrap_or("");
-
-        let has_spec = has_spec_val == "yes" || has_spec_val == "ext";
-        let is_external_body = has_spec_val == "ext";
-        let has_proof = has_proof_val == "yes";
-
-        let line_number = if link.contains("#L") {
-            link.rsplit_once("#L")
-                .and_then(|(_, l)| l.parse().ok())
-                .unwrap_or(0)
-        } else {
-            0
-        };
 
         let result_key = format!("{}::{}", function, module);
         results.insert(
             result_key,
             TrackedFunction {
-                has_spec,
-                has_proof,
-                is_external_body,
-                line_number,
                 link,
-                function: function.clone(),
-                module,
                 qualified_name: function,
             },
         );
@@ -154,7 +129,9 @@ fn read_tracked_csv(csv_path: &Path) -> Result<HashMap<String, TrackedFunction>>
 }
 
 /// Disambiguate tracked items that have the same qualified_name.
-fn tweak_disambiguate(tracked: HashMap<String, TrackedFunction>) -> HashMap<String, TrackedFunction> {
+fn disambiguate_names(
+    tracked: HashMap<String, TrackedFunction>,
+) -> HashMap<String, TrackedFunction> {
     let mut name_counts: HashMap<String, usize> = HashMap::new();
     for func in tracked.values() {
         *name_counts.entry(func.qualified_name.clone()).or_insert(0) += 1;
@@ -170,7 +147,8 @@ fn tweak_disambiguate(tracked: HashMap<String, TrackedFunction>) -> HashMap<Stri
         return tracked;
     }
 
-    let mut name_indices: HashMap<String, usize> = duplicates.iter().map(|n| (n.clone(), 0)).collect();
+    let mut name_indices: HashMap<String, usize> =
+        duplicates.iter().map(|n| (n.clone(), 0)).collect();
     let mut new_tracked = HashMap::new();
 
     for (key, mut func) in tracked {
@@ -213,14 +191,20 @@ fn tracked_to_structure(tracked: &HashMap<String, TrackedFunction>) -> HashMap<S
 }
 
 /// Generate structure .md files from a structure dictionary.
-fn generate_structure_files(structure: &HashMap<String, Value>, structure_root: &Path) -> Result<()> {
+fn generate_structure_files(
+    structure: &HashMap<String, Value>,
+    structure_root: &Path,
+) -> Result<()> {
     let mut created_count = 0;
 
     for (relative_path_str, metadata) in structure {
         let file_path = structure_root.join(relative_path_str);
 
         if file_path.exists() {
-            eprintln!("WARNING: File already exists, overwriting: {}", file_path.display());
+            eprintln!(
+                "WARNING: File already exists, overwriting: {}",
+                file_path.display()
+            );
         }
 
         let mut metadata_map: HashMap<String, Value> = if let Some(obj) = metadata.as_object() {
@@ -232,10 +216,14 @@ fn generate_structure_files(structure: &HashMap<String, Value>, structure_root: 
         let body_content = metadata_map.remove("content");
         let body = body_content.as_ref().and_then(|v| v.as_str());
 
-        write_frontmatter_file(&file_path, &metadata_map, body)?;
+        frontmatter::write(&file_path, &metadata_map, body)?;
         created_count += 1;
     }
 
-    println!("Created {} structure files in {}", created_count, structure_root.display());
+    println!(
+        "Created {} structure files in {}",
+        created_count,
+        structure_root.display()
+    );
     Ok(())
 }

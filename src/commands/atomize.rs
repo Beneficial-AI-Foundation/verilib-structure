@@ -2,9 +2,10 @@
 //!
 //! Enrich structure files with metadata from SCIP atoms.
 
-use crate::config::constants::PROBE_PREFIX;
 use crate::config::ConfigPaths;
-use crate::utils::{check_probe_verus_or_exit, parse_frontmatter, run_command};
+use crate::frontmatter;
+use crate::probe::{self, ATOMIZE_INTERMEDIATE_FILES, DEFAULT_PREFIX};
+use crate::utils::run_command;
 use anyhow::{bail, Context, Result};
 use intervaltree::IntervalTree;
 use serde_json::{json, Value};
@@ -24,15 +25,15 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
 
     // Step 2: Generate atoms.json using probe-verus atomize
     let probe_atoms = generate_probe_atoms(&project_root, &config.atoms_path)?;
-    let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
+    let probe_atoms = filter_by_prefix(&probe_atoms, DEFAULT_PREFIX);
     println!("Loaded {} filtered atoms", probe_atoms.len());
 
     // Step 3: Build probe index for fast lookups
-    let probe_index = generate_probe_index(&probe_atoms);
+    let probe_index = build_line_index(&probe_atoms);
 
     // Step 4: Enrich stubs with code-name and all atom metadata
     println!("Enriching stubs with atom metadata...");
-    let enriched = enrich_stubs_with_atoms(stubs, &probe_index, &probe_atoms)?;
+    let enriched = enrich_stubs(&stubs, &probe_index, &probe_atoms)?;
 
     // Step 5: Save enriched stubs.json
     println!(
@@ -45,7 +46,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
     // Optionally update .md files with code-name
     if update_stubs {
         println!("Updating structure files with code-names...");
-        sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
+        update_structure_files(&probe_index, &probe_atoms, &config.structure_root)?;
     }
 
     println!("Done.");
@@ -54,7 +55,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
 
 /// Run probe-verus stubify to generate stubs.json from .md files.
 fn generate_stubs(structure_root: &Path, stubs_path: &Path) -> Result<HashMap<String, Value>> {
-    check_probe_verus_or_exit()?;
+    probe::require_installed()?;
 
     if let Some(parent) = stubs_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -93,11 +94,8 @@ fn generate_stubs(structure_root: &Path, stubs_path: &Path) -> Result<HashMap<St
 }
 
 /// Run probe-verus atomize on the project and save results to atoms.json.
-fn generate_probe_atoms(
-    project_root: &Path,
-    atoms_path: &Path,
-) -> Result<HashMap<String, Value>> {
-    check_probe_verus_or_exit()?;
+fn generate_probe_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMap<String, Value>> {
+    probe::require_installed()?;
 
     if let Some(parent) = atoms_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -129,20 +127,7 @@ fn generate_probe_atoms(
         bail!("probe-verus atomize failed");
     }
 
-    // Clean up generated intermediate files
-    for cleanup_file in ["data/index.scip", "data/index.scip.json"] {
-        let cleanup_path = project_root.join(cleanup_file);
-        if cleanup_path.exists() {
-            let _ = std::fs::remove_file(&cleanup_path);
-        }
-    }
-
-    let data_dir = project_root.join("data");
-    if data_dir.exists() && data_dir.is_dir() {
-        if std::fs::read_dir(&data_dir)?.next().is_none() {
-            let _ = std::fs::remove_dir(&data_dir);
-        }
-    }
+    probe::cleanup_intermediate_files(project_root, ATOMIZE_INTERMEDIATE_FILES);
 
     println!("Atoms saved to {}", atoms_path.display());
 
@@ -152,12 +137,9 @@ fn generate_probe_atoms(
 }
 
 /// Filter probe atoms to only those where probe-name starts with prefix.
-fn filter_probe_atoms(
-    probe_atoms: &HashMap<String, Value>,
-    prefix: &str,
-) -> HashMap<String, Value> {
+fn filter_by_prefix(atoms: &HashMap<String, Value>, prefix: &str) -> HashMap<String, Value> {
     let uri_prefix = format!("probe:{}/", prefix);
-    probe_atoms
+    atoms
         .iter()
         .filter(|(k, _)| k.starts_with(&uri_prefix))
         .map(|(k, v)| (k.clone(), v.clone()))
@@ -165,12 +147,10 @@ fn filter_probe_atoms(
 }
 
 /// Build an interval tree index for fast line-based lookups.
-fn generate_probe_index(
-    probe_atoms: &HashMap<String, Value>,
-) -> HashMap<String, IntervalTree<u32, String>> {
+fn build_line_index(atoms: &HashMap<String, Value>) -> HashMap<String, IntervalTree<u32, String>> {
     let mut trees: HashMap<String, Vec<(std::ops::Range<u32>, String)>> = HashMap::new();
 
-    for (probe_name, atom_data) in probe_atoms {
+    for (probe_name, atom_data) in atoms {
         let code_path = match atom_data.get("code-path").and_then(|v| v.as_str()) {
             Some(p) => p.to_string(),
             None => continue,
@@ -207,52 +187,50 @@ fn generate_probe_index(
 fn lookup_code_name(
     code_path: &str,
     code_line: u32,
-    probe_index: &HashMap<String, IntervalTree<u32, String>>,
+    index: &HashMap<String, IntervalTree<u32, String>>,
 ) -> Option<String> {
-    let tree = probe_index.get(code_path)?;
+    let tree = index.get(code_path)?;
 
-    let matching_intervals: Vec<_> = tree
+    let matching: Vec<_> = tree
         .query(code_line..code_line + 1)
         .filter(|iv| iv.range.start == code_line)
         .collect();
 
-    if matching_intervals.is_empty() {
+    if matching.is_empty() {
         return None;
     }
 
-    Some(matching_intervals[0].value.clone())
+    Some(matching[0].value.clone())
 }
 
 /// Enrich stubs with code-name and all metadata from atoms.
-fn enrich_stubs_with_atoms(
-    stubs: HashMap<String, Value>,
-    probe_index: &HashMap<String, IntervalTree<u32, String>>,
-    probe_atoms: &HashMap<String, Value>,
+fn enrich_stubs(
+    stubs: &HashMap<String, Value>,
+    index: &HashMap<String, IntervalTree<u32, String>>,
+    atoms: &HashMap<String, Value>,
 ) -> Result<HashMap<String, Value>> {
     let mut result = HashMap::new();
     let mut enriched_count = 0;
     let mut skipped_count = 0;
 
     for (file_path, entry) in stubs {
-        // Get code-path and code-line from the stub entry
         let code_path = entry.get("code-path").and_then(|v| v.as_str());
-        let code_line = entry.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
+        let code_line = entry
+            .get("code-line")
+            .and_then(|v| v.as_u64())
+            .map(|l| l as u32);
 
         let (code_path, code_line) = match (code_path, code_line) {
             (Some(p), Some(l)) => (p, l),
             _ => {
-                eprintln!(
-                    "WARNING: Missing code-path or code-line for {}",
-                    file_path
-                );
+                eprintln!("WARNING: Missing code-path or code-line for {}", file_path);
                 skipped_count += 1;
-                result.insert(file_path, entry);
+                result.insert(file_path.clone(), entry.clone());
                 continue;
             }
         };
 
-        // Look up code-name from code-path and code-line
-        let code_name = match lookup_code_name(code_path, code_line, probe_index) {
+        let code_name = match lookup_code_name(code_path, code_line, index) {
             Some(name) => name,
             None => {
                 eprintln!(
@@ -260,13 +238,12 @@ fn enrich_stubs_with_atoms(
                     code_path, code_line, file_path
                 );
                 skipped_count += 1;
-                result.insert(file_path, entry);
+                result.insert(file_path.clone(), entry.clone());
                 continue;
             }
         };
 
-        // Get all metadata from atoms.json for this code-name
-        let atom = match probe_atoms.get(&code_name) {
+        let atom = match atoms.get(&code_name) {
             Some(a) => a,
             None => {
                 eprintln!(
@@ -274,14 +251,13 @@ fn enrich_stubs_with_atoms(
                     code_name, file_path
                 );
                 skipped_count += 1;
-                result.insert(file_path, entry);
+                result.insert(file_path.clone(), entry.clone());
                 continue;
             }
         };
 
-        // Build enriched entry with all atom metadata
         let enriched_entry = build_enriched_entry(&code_name, atom);
-        result.insert(file_path, enriched_entry);
+        result.insert(file_path.clone(), enriched_entry);
         enriched_count += 1;
     }
 
@@ -338,10 +314,10 @@ fn build_enriched_entry(code_name: &str, atom: &Value) -> Value {
     })
 }
 
-/// Sync structure .md files with probe atoms index (update code-name field).
-fn sync_structure_files_with_atoms(
-    probe_index: &HashMap<String, IntervalTree<u32, String>>,
-    probe_atoms: &HashMap<String, Value>,
+/// Update structure .md files with code-name field.
+fn update_structure_files(
+    index: &HashMap<String, IntervalTree<u32, String>>,
+    atoms: &HashMap<String, Value>,
     structure_root: &Path,
 ) -> Result<()> {
     let mut updated_count = 0;
@@ -356,18 +332,13 @@ fn sync_structure_files_with_atoms(
             continue;
         }
 
-        let frontmatter = match parse_frontmatter(path) {
+        let fm = match frontmatter::parse(path) {
             Ok(fm) => fm,
             Err(_) => continue,
         };
 
-        let code_path = frontmatter
-            .get("code-path")
-            .and_then(|v| v.as_str());
-        let code_line = frontmatter
-            .get("code-line")
-            .and_then(|v| v.as_u64())
-            .map(|l| l as u32);
+        let code_path = fm.get("code-path").and_then(|v| v.as_str());
+        let code_line = fm.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
 
         let (code_path, code_line) = match (code_path, code_line) {
             (Some(p), Some(l)) => (p, l),
@@ -377,8 +348,7 @@ fn sync_structure_files_with_atoms(
             }
         };
 
-        // Look up code-name
-        let code_name = match lookup_code_name(code_path, code_line, probe_index) {
+        let code_name = match lookup_code_name(code_path, code_line, index) {
             Some(name) => name,
             None => {
                 eprintln!(
@@ -390,11 +360,11 @@ fn sync_structure_files_with_atoms(
             }
         };
 
-        // Verify code-name exists in atoms
-        if !probe_atoms.contains_key(&code_name) {
+        if !atoms.contains_key(&code_name) {
             eprintln!(
                 "WARNING: code-name {} not in atoms ({})",
-                code_name, path.display()
+                code_name,
+                path.display()
             );
             not_found_count += 1;
             continue;
@@ -414,13 +384,11 @@ fn sync_structure_files_with_atoms(
         let body = body_start.map(|start| original_content[start..].to_string());
 
         // Build updated frontmatter
-        let mut metadata: HashMap<String, Value> = frontmatter
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let mut metadata: HashMap<String, Value> =
+            fm.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         metadata.insert("code-name".to_string(), json!(code_name));
 
-        crate::utils::write_frontmatter_file(path, &metadata, body.as_deref())?;
+        frontmatter::write(path, &metadata, body.as_deref())?;
         updated_count += 1;
     }
 

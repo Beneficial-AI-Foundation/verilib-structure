@@ -2,11 +2,10 @@
 //!
 //! Run verification and manage verification certs.
 
+use crate::certs::{create_cert, delete_cert, get_existing_certs};
 use crate::config::ConfigPaths;
-use crate::utils::{
-    check_probe_verus_or_exit, create_cert, delete_cert, get_display_name, get_existing_certs,
-    get_structure_names, run_command,
-};
+use crate::probe::{self, VERIFY_INTERMEDIATE_FILES};
+use crate::utils::{get_display_name, get_structure_names, run_command};
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -26,7 +25,7 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         &config.atoms_path,
         verify_only_module.as_deref(),
     )?;
-    let (verified_funcs, failed_funcs) = get_verification_results(&proofs_data);
+    let (verified_funcs, failed_funcs) = partition_verification_results(&proofs_data);
 
     println!("\nVerification summary:");
     println!("  Verified: {}", verified_funcs.len());
@@ -76,6 +75,17 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         }
     }
 
+    print_cert_changes(&created, &deleted, existing_certs.len());
+
+    Ok(())
+}
+
+/// Print summary of certificate changes.
+fn print_cert_changes(
+    created: &[(String, PathBuf)],
+    deleted: &[(String, PathBuf)],
+    existing_count: usize,
+) {
     println!();
     println!("{}", "=".repeat(60));
     println!("VERIFICATION CERT CHANGES");
@@ -83,7 +93,7 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
 
     if !created.is_empty() {
         println!("\n✓ Created {} new certs:", created.len());
-        for (name, _) in &created {
+        for (name, _) in created {
             let display_name = get_display_name(name);
             println!("  + {}", display_name);
             println!("    {}", name);
@@ -94,7 +104,7 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
 
     if !deleted.is_empty() {
         println!("\n✗ Deleted {} certs (verification failed):", deleted.len());
-        for (name, _) in &deleted {
+        for (name, _) in deleted {
             let display_name = get_display_name(name);
             println!("  - {}", display_name);
             println!("    {}", name);
@@ -105,17 +115,11 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
 
     println!();
     println!("{}", "=".repeat(60));
-    let final_certs = existing_certs.len() + created.len() - deleted.len();
-    println!(
-        "Total certs: {} → {}",
-        existing_certs.len(),
-        final_certs
-    );
+    let final_certs = existing_count + created.len() - deleted.len();
+    println!("Total certs: {} → {}", existing_count, final_certs);
     println!("  Created: +{}", created.len());
     println!("  Deleted: -{}", deleted.len());
     println!("{}", "=".repeat(60));
-
-    Ok(())
 }
 
 /// Run probe-verus verify and return the results.
@@ -125,7 +129,7 @@ fn run_probe_verify(
     atoms_path: &Path,
     verify_only_module: Option<&str>,
 ) -> Result<HashMap<String, Value>> {
-    check_probe_verus_or_exit()?;
+    probe::require_installed()?;
 
     if let Some(parent) = proofs_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -171,32 +175,17 @@ fn run_probe_verify(
         proofs_path.display()
     );
 
-    // Clean up generated intermediate files
-    for cleanup_file in [
-        "data/verification_config.json",
-        "data/verification_output.txt",
-    ] {
-        let cleanup_path = project_root.join(cleanup_file);
-        if cleanup_path.exists() {
-            let _ = std::fs::remove_file(&cleanup_path);
-        }
-    }
-
-    let data_dir = project_root.join("data");
-    if data_dir.exists() && data_dir.is_dir() {
-        if std::fs::read_dir(&data_dir)?.next().is_none() {
-            let _ = std::fs::remove_dir(&data_dir);
-        }
-    }
+    probe::cleanup_intermediate_files(project_root, VERIFY_INTERMEDIATE_FILES);
 
     let content = std::fs::read_to_string(proofs_path)?;
     let proofs: HashMap<String, Value> = serde_json::from_str(&content)?;
     Ok(proofs)
 }
 
-/// Extract verified and failed function probe-names from proofs data.
+/// Partition proofs data into verified and failed function sets.
 ///
 /// The proofs.json schema from probe-verus is a dictionary keyed by probe-name:
+/// ```json
 /// {
 ///   "probe:crate/version/module/function()": {
 ///     "code-path": "string",
@@ -205,7 +194,10 @@ fn run_probe_verify(
 ///     "status": "success|failure|sorries|warning"
 ///   }
 /// }
-fn get_verification_results(proofs_data: &HashMap<String, Value>) -> (HashSet<String>, HashSet<String>) {
+/// ```
+fn partition_verification_results(
+    proofs_data: &HashMap<String, Value>,
+) -> (HashSet<String>, HashSet<String>) {
     let mut verified = HashSet::new();
     let mut failed = HashSet::new();
 

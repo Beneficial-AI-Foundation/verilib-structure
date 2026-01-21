@@ -2,11 +2,10 @@
 //!
 //! Check specification status and manage spec certs.
 
+use crate::certs::{create_cert, get_existing_certs};
 use crate::config::ConfigPaths;
-use crate::utils::{
-    check_probe_verus_or_exit, create_cert, display_menu, get_existing_certs, get_structure_names,
-    run_command,
-};
+use crate::probe;
+use crate::utils::{display_menu, get_structure_names, run_command};
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -22,7 +21,7 @@ pub fn run(project_root: PathBuf) -> Result<()> {
     let specs_path = config.verilib_path.join("specs.json");
     let specs_data = run_probe_specify(&project_root, &specs_path, &config.atoms_path)?;
 
-    let functions_with_specs = get_functions_with_specs(&specs_data);
+    let functions_with_specs = filter_functions_with_specs(&specs_data);
     println!(
         "\nFound {} functions with specs in codebase",
         functions_with_specs.len()
@@ -53,12 +52,15 @@ pub fn run(project_root: PathBuf) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{} functions with specs need certification", uncertified.len());
+    println!(
+        "\n{} functions with specs need certification",
+        uncertified.len()
+    );
 
     let mut uncertified_list: Vec<(String, Value)> = uncertified.into_iter().collect();
     uncertified_list.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let selected_indices = display_menu(&uncertified_list, |i, name, info| {
+    let selected_indices = display_menu(&uncertified_list, |i, _name, info| {
         let has_requires = info
             .get("has_requires")
             .and_then(|v| v.as_bool())
@@ -125,13 +127,16 @@ fn run_probe_specify(
     specs_path: &Path,
     atoms_path: &Path,
 ) -> Result<HashMap<String, Value>> {
-    check_probe_verus_or_exit()?;
+    probe::require_installed()?;
 
     if let Some(parent) = specs_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    println!("Running probe-verus specify on {}...", project_root.display());
+    println!(
+        "Running probe-verus specify on {}...",
+        project_root.display()
+    );
 
     let output = run_command(
         "probe-verus",
@@ -163,7 +168,7 @@ fn run_probe_specify(
 }
 
 /// Filter specs data to only functions that have requires or ensures.
-fn get_functions_with_specs(specs_data: &HashMap<String, Value>) -> HashMap<String, Value> {
+fn filter_functions_with_specs(specs_data: &HashMap<String, Value>) -> HashMap<String, Value> {
     specs_data
         .iter()
         .filter(|(_, func_info)| {
