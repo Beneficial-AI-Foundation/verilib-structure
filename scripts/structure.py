@@ -1018,6 +1018,30 @@ def filter_probe_atoms(probe_atoms: dict[str, dict], prefix: str) -> dict[str, d
     }
 
 
+def load_structure_from_files(structure_root: Path) -> dict[str, dict]:
+    """
+    Load structure from .md files into a dictionary.
+
+    Args:
+        structure_root: Path to the structure root directory.
+
+    Returns:
+        Dictionary mapping relative file path to frontmatter metadata.
+    """
+    structure = {}
+
+    for md_file in structure_root.rglob("*.md"):
+        post = frontmatter.load(md_file)
+        relative_path = str(md_file.relative_to(structure_root))
+        structure[relative_path] = dict(post.metadata)
+
+    return structure
+
+
+# Alias for blueprint structure loading (same logic, different frontmatter keys)
+load_blueprint_structure_from_files = load_structure_from_files
+
+
 def _update_entry_from_atoms(
     entry: dict,
     probe_index: dict[str, IntervalTree],
@@ -1192,81 +1216,6 @@ def _generate_enriched_entry(
     return enriched_entry, None
 
 
-def populate_structure_files_metadata(
-    probe_atoms: dict[str, dict],
-    probe_index: dict[str, IntervalTree],
-    structure_root: Path,
-    project_root: Path
-) -> None:
-    """Generate metadata files for each structure .md file."""
-    created_count = 0
-    skipped_count = 0
-
-    for md_file in structure_root.rglob("*.md"):
-        post = frontmatter.load(md_file)
-        probe_name = post.get('code-name')
-
-        # If code-name is missing, look it up from probe_index
-        if not probe_name:
-            code_path = post.get('code-path')
-            line_start = post.get('code-line')
-
-            if code_path and line_start is not None:
-                if code_path in probe_index:
-                    tree = probe_index[code_path]
-                    exact_matches = [iv for iv in tree[line_start] if iv.begin == line_start]
-                    if exact_matches:
-                        probe_name = exact_matches[0].data
-                    else:
-                        print(f"WARNING: No atom found at {code_path}:{line_start} for {md_file}")
-                        skipped_count += 1
-                        continue
-                else:
-                    print(f"WARNING: code-path '{code_path}' not in probe_index for {md_file}")
-                    skipped_count += 1
-                    continue
-            else:
-                print(f"WARNING: Missing code-name and code-path/code-line for {md_file}")
-                skipped_count += 1
-                continue
-
-        enriched_entry, error = _generate_enriched_entry(probe_name, probe_atoms)
-
-        if error:
-            print(f"WARNING: {error} for {md_file}")
-            skipped_count += 1
-            continue
-
-        meta_file = md_file.with_suffix('.meta.verilib')
-        with open(meta_file, 'w', encoding='utf-8') as f:
-            json.dump(enriched_entry, f, indent=2)
-
-        code_path = enriched_entry["code-path"]
-        lines_start = enriched_entry["code-lines"]["start"]
-        lines_end = enriched_entry["code-lines"]["end"]
-
-        source_file = project_root / code_path
-        if not source_file.exists():
-            print(f"WARNING: Source file not found: {source_file}")
-            skipped_count += 1
-            continue
-
-        with open(source_file, encoding='utf-8') as f:
-            all_lines = f.readlines()
-
-        extracted_lines = all_lines[lines_start - 1:lines_end]
-        atom_content = ''.join(extracted_lines)
-
-        atom_file = md_file.with_suffix('.atom.verilib')
-        with open(atom_file, 'w', encoding='utf-8') as f:
-            f.write(atom_content)
-
-        created_count += 1
-
-    print(f"Metadata files created: {created_count}")
-    print(f"Skipped: {skipped_count}")
-
-
 def enrich_structure_json(
     structure: dict[str, dict],
     probe_atoms: dict[str, dict],
@@ -1344,169 +1293,6 @@ def populate_blueprint_json_metadata(
     return result
 
 
-def populate_blueprint_files_metadata(
-    blueprint_data: dict[str, dict],
-    structure_root: Path,
-) -> None:
-    """Generate metadata files for each blueprint structure .md file."""
-    created_count = 0
-    skipped_count = 0
-
-    for md_file in structure_root.rglob("*.md"):
-        post = frontmatter.load(md_file)
-        veri_name = post.get('veri-name')
-
-        if not veri_name:
-            print(f"WARNING: Missing veri-name for {md_file}")
-            skipped_count += 1
-            continue
-
-        node_id = veri_name[5:] if veri_name.startswith("veri:") else veri_name
-
-        if node_id not in blueprint_data:
-            print(f"WARNING: Node '{node_id}' not found in blueprint.json for {md_file}")
-            skipped_count += 1
-            continue
-
-        node_info = blueprint_data[node_id]
-
-        type_deps = node_info.get('type-dependencies', [])
-        term_deps = node_info.get('term-dependencies', [])
-        all_deps = [f"veri:{dep}" for dep in type_deps + term_deps]
-
-        meta_data = {
-            "veri-name": veri_name,
-            "dependencies": all_deps,
-            "visible": True
-        }
-
-        meta_file = md_file.with_suffix('.meta.verilib')
-        with open(meta_file, 'w', encoding='utf-8') as f:
-            json.dump(meta_data, f, indent=2)
-
-        content = node_info.get('content', '')
-        atom_file = md_file.with_suffix('.atom.verilib')
-        with open(atom_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        created_count += 1
-
-    print(f"Metadata files created: {created_count}")
-    print(f"Skipped: {skipped_count}")
-
-
-def structure_to_tree(structure_root: Path) -> list[dict]:
-    """Convert structure files to a JSON tree format."""
-    scip_to_path: dict[str, str] = {}
-    for md_file in structure_root.rglob("*.md"):
-        meta_file = md_file.with_suffix(".meta.verilib")
-        if not meta_file.exists():
-            continue
-
-        with open(meta_file, encoding="utf-8") as f:
-            meta_data = json.load(f)
-
-        scip_name = meta_data.get("code-name", "")
-        if not scip_name:
-            continue
-
-        relative_path = md_file.relative_to(structure_root)
-        path = "/" + str(relative_path.with_suffix(""))
-        scip_to_path[scip_name] = path
-
-    def build_tree_recursive(dir_path: Path, parent_identifier: str = "") -> list[dict]:
-        nodes = []
-        items = sorted(dir_path.iterdir())
-
-        subdirs = [item for item in items if item.is_dir()]
-        md_files = [item for item in items if item.is_file() and item.suffix == ".md"]
-
-        for subdir in subdirs:
-            folder_name = subdir.name
-            folder_identifier = f"{parent_identifier}/{folder_name}" if parent_identifier else folder_name
-
-            children = build_tree_recursive(subdir, folder_identifier)
-
-            if children:
-                folder_node = {
-                    "identifier": folder_identifier,
-                    "content": "",
-                    "children": children,
-                    "file_type": "folder",
-                }
-                nodes.append(folder_node)
-
-        for md_file in md_files:
-            meta_file = md_file.with_suffix(".meta.verilib")
-            atom_file = md_file.with_suffix(".atom.verilib")
-
-            if not meta_file.exists():
-                continue
-
-            with open(meta_file, encoding="utf-8") as f:
-                meta_data = json.load(f)
-
-            scip_name = meta_data.get("code-name", "")
-            if not scip_name:
-                continue
-
-            identifier = scip_to_path.get(scip_name, "")
-            if not identifier:
-                continue
-
-            content = ""
-            if atom_file.exists():
-                content = atom_file.read_text(encoding="utf-8")
-
-            scip_dependencies = meta_data.get("dependencies", [])
-            dependencies = [scip_to_path.get(dep, dep) for dep in scip_dependencies]
-
-            specified = meta_data.get("specified", False)
-
-            file_node = {
-                "identifier": identifier,
-                "content": content,
-                "children": [],
-                "file_type": "file",
-                "dependencies": dependencies,
-                "specified": specified,
-            }
-            nodes.append(file_node)
-
-        return nodes
-
-    return build_tree_recursive(structure_root)
-
-
-def deploy(url, repo, api_key, tree, debug_path=None):
-    """Send POST request to deploy endpoint."""
-    json_body = {"tree": tree}
-
-    deploy_url = f"{url}/v2/repo/deploy/{repo}"
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": f"ApiKey {api_key}",
-    }
-
-    if debug_path:
-        debug_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(debug_path, "a", encoding="utf-8") as f:
-            f.write("\n=== deploy json_body ===\n")
-            json.dump(json_body, f, indent=4)
-            f.write("\n")
-        print(f"json_body written to {debug_path}")
-
-    response = requests.post(deploy_url, headers=headers, json=json_body)
-
-    print(f"Status Code: {response.status_code}")
-    print(f"Response Headers: {dict(response.headers)}")
-    print(f"Response Body: {response.text}")
-
-    return response
-
-
 def cmd_atomize(args: argparse.Namespace) -> None:
     """
     Execute the atomize subcommand.
@@ -1522,7 +1308,6 @@ def cmd_atomize(args: argparse.Namespace) -> None:
     verilib_path = config["verilib_path"]
     structure_root = config["structure_root"]
     structure_json_path = config["structure_json_path"]
-    structure_meta_path = verilib_path / "structure_meta.json"
 
     if structure_type == "blueprint":
         blueprint_path = verilib_path / "blueprint.json"
@@ -1534,27 +1319,25 @@ def cmd_atomize(args: argparse.Namespace) -> None:
         with open(blueprint_path, encoding='utf-8') as f:
             blueprint_data = json.load(f)
 
+        # Load structure from appropriate source based on form
         if structure_form == "json":
             if not structure_json_path.exists():
                 print(f"Error: {structure_json_path} not found", file=sys.stderr)
                 raise SystemExit(1)
-
             print(f"Loading structure from {structure_json_path}...")
             with open(structure_json_path, encoding='utf-8') as f:
                 structure = json.load(f)
+        else:  # files
+            print(f"Loading structure from {structure_root}...")
+            structure = load_blueprint_structure_from_files(structure_root)
 
-            print("Populating structure metadata from blueprint...")
-            metadata = populate_blueprint_json_metadata(structure, blueprint_data)
+        print("Populating structure metadata from blueprint...")
+        metadata = populate_blueprint_json_metadata(structure, blueprint_data)
 
-            print(f"Saving metadata to {structure_meta_path}...")
-            with open(structure_meta_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2)
-            print("Done.")
-
-        elif structure_form == "files":
-            print(f"Populating blueprint metadata files in {structure_root}...")
-            populate_blueprint_files_metadata(blueprint_data, structure_root)
-            print("Done.")
+        print(f"Saving enriched structure to {structure_json_path}...")
+        with open(structure_json_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2)
+        print("Done.")
 
     elif structure_type == "dalek-lite":
         atoms_path = verilib_path / "atoms.json"
@@ -1562,34 +1345,33 @@ def cmd_atomize(args: argparse.Namespace) -> None:
         probe_atoms = filter_probe_atoms(probe_atoms, PROBE_PREFIX)
         probe_index = generate_probe_index(probe_atoms)
 
+        # Load structure from appropriate source based on form
         if structure_form == "json":
             if not structure_json_path.exists():
                 print(f"Error: {structure_json_path} not found", file=sys.stderr)
                 raise SystemExit(1)
-
             print(f"Loading structure from {structure_json_path}...")
             with open(structure_json_path, encoding='utf-8') as f:
                 structure = json.load(f)
+        else:  # files
+            print(f"Loading structure from {structure_root}...")
+            structure = load_structure_from_files(structure_root)
 
-            print("Syncing structure with probe atoms...")
-            structure = sync_structure_json_with_atoms(structure, probe_index, probe_atoms)
+        print("Syncing structure with probe atoms...")
+        structure = sync_structure_json_with_atoms(structure, probe_index, probe_atoms)
 
-            print("Enriching structure with atom metadata...")
-            enriched = enrich_structure_json(structure, probe_atoms)
+        # Optionally update .md files with code-name
+        if update_stubs and structure_form == "files":
+            print("Updating structure files with code-names...")
+            sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
 
-            print(f"Saving enriched structure to {structure_json_path}...")
-            with open(structure_json_path, 'w', encoding='utf-8') as f:
-                json.dump(enriched, f, indent=2)
-            print("Done.")
+        print("Enriching structure with atom metadata...")
+        enriched = enrich_structure_json(structure, probe_atoms)
 
-        elif structure_form == "files":
-            if update_stubs:
-                print(f"Syncing structure files in {structure_root} with probe atoms...")
-                sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
-
-            print("Populating structure metadata files...")
-            populate_structure_files_metadata(probe_atoms, probe_index, structure_root, project_root)
-            print("Done.")
+        print(f"Saving enriched structure to {structure_json_path}...")
+        with open(structure_json_path, 'w', encoding='utf-8') as f:
+            json.dump(enriched, f, indent=2)
+        print("Done.")
 
     else:
         print(f"Error: Unknown structure type '{structure_type}'", file=sys.stderr)

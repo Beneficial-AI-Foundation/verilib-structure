@@ -51,8 +51,7 @@ The script is self-contained with PEP 723 inline metadata (dependencies declared
 
 All data lives in `.verilib/` within the target project:
 - `config.json` - Structure type, form, and root path
-- `stubs.json` - Structure data (when form=json)
-- `structure_meta.json` - Metadata from atomization
+- `stubs.json` - Enriched structure from atomization
 - `blueprint.json` - Blueprint dependency graph (blueprint type only)
 - `tracked_functions.csv` - Tracked functions (dalek-lite type only)
 - `certs/specify/` - Specification certificates
@@ -60,8 +59,10 @@ All data lives in `.verilib/` within the target project:
 
 ### Structure Forms
 
-- **json**: Single `stubs.json` file (default for blueprint)
-- **files**: Hierarchy of `.md` files with YAML frontmatter, plus `.meta.verilib` and `.atom.verilib` companions
+- **json**: Single `stubs.json` file
+- **files**: Hierarchy of `.md` files with YAML frontmatter
+
+Both forms generate enriched `stubs.json` during atomization.
 
 ### External Dependencies
 

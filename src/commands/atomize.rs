@@ -49,35 +49,61 @@ fn run_blueprint_atomize(config: &ConfigPaths, structure_form: StructureForm) ->
     let content = std::fs::read_to_string(&config.blueprint_json_path)?;
     let blueprint_data: HashMap<String, Value> = serde_json::from_str(&content)?;
 
-    match structure_form {
+    // Load structure from appropriate source based on form
+    let structure: HashMap<String, Value> = match structure_form {
         StructureForm::Json => {
             if !config.structure_json_path.exists() {
                 bail!("{} not found", config.structure_json_path.display());
             }
-
             println!("Loading structure from {}...", config.structure_json_path.display());
             let content = std::fs::read_to_string(&config.structure_json_path)?;
-            let structure: HashMap<String, Value> = serde_json::from_str(&content)?;
-
-            println!("Populating structure metadata from blueprint...");
-            let metadata = populate_blueprint_json_metadata(&structure, &blueprint_data)?;
-
-            println!("Saving metadata to {}...", config.structure_meta_path.display());
-            let content = serde_json::to_string_pretty(&metadata)?;
-            std::fs::write(&config.structure_meta_path, content)?;
-            println!("Done.");
+            serde_json::from_str(&content)?
         }
         StructureForm::Files => {
-            println!(
-                "Populating blueprint metadata files in {}...",
-                config.structure_root.display()
-            );
-            populate_blueprint_files_metadata(&blueprint_data, &config.structure_root)?;
-            println!("Done.");
+            println!("Loading structure from {}...", config.structure_root.display());
+            load_blueprint_structure_from_files(&config.structure_root)?
         }
-    }
+    };
+
+    println!("Populating structure metadata from blueprint...");
+    let metadata = populate_blueprint_json_metadata(&structure, &blueprint_data)?;
+
+    println!("Saving enriched structure to {}...", config.structure_json_path.display());
+    let content = serde_json::to_string_pretty(&metadata)?;
+    std::fs::write(&config.structure_json_path, content)?;
+    println!("Done.");
 
     Ok(())
+}
+
+/// Load blueprint structure from .md files into a HashMap.
+fn load_blueprint_structure_from_files(structure_root: &Path) -> Result<HashMap<String, Value>> {
+    let mut structure = HashMap::new();
+
+    for entry in walkdir::WalkDir::new(structure_root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.extension().map_or(false, |ext| ext == "md") {
+            continue;
+        }
+
+        let frontmatter = match parse_frontmatter(path) {
+            Ok(fm) => fm,
+            Err(_) => continue,
+        };
+
+        let relative_path = path
+            .strip_prefix(structure_root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+
+        structure.insert(relative_path, json!(frontmatter));
+    }
+
+    Ok(structure)
 }
 
 /// Generate metadata dictionary from blueprint structure JSON.
@@ -144,97 +170,6 @@ fn populate_blueprint_json_metadata(
     Ok(result)
 }
 
-/// Generate metadata files for each blueprint structure .md file.
-fn populate_blueprint_files_metadata(
-    blueprint_data: &HashMap<String, Value>,
-    structure_root: &Path,
-) -> Result<()> {
-    let mut created_count = 0;
-    let mut skipped_count = 0;
-
-    for entry in walkdir::WalkDir::new(structure_root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if !path.extension().map_or(false, |ext| ext == "md") {
-            continue;
-        }
-
-        let frontmatter = match parse_frontmatter(path) {
-            Ok(fm) => fm,
-            Err(_) => {
-                skipped_count += 1;
-                continue;
-            }
-        };
-
-        let veri_name = match frontmatter.get("veri-name").and_then(|v| v.as_str()) {
-            Some(name) => name,
-            None => {
-                eprintln!("WARNING: Missing veri-name for {}", path.display());
-                skipped_count += 1;
-                continue;
-            }
-        };
-
-        let node_id = veri_name.strip_prefix("veri:").unwrap_or(veri_name);
-
-        if !blueprint_data.contains_key(node_id) {
-            eprintln!(
-                "WARNING: Node '{}' not found in blueprint.json for {}",
-                node_id,
-                path.display()
-            );
-            skipped_count += 1;
-            continue;
-        }
-
-        let node_info = &blueprint_data[node_id];
-
-        let mut all_deps = Vec::new();
-        if let Some(type_deps) = node_info.get("type-dependencies").and_then(|v| v.as_array()) {
-            for dep in type_deps {
-                if let Some(s) = dep.as_str() {
-                    all_deps.push(format!("veri:{}", s));
-                }
-            }
-        }
-        if let Some(term_deps) = node_info.get("term-dependencies").and_then(|v| v.as_array()) {
-            for dep in term_deps {
-                if let Some(s) = dep.as_str() {
-                    all_deps.push(format!("veri:{}", s));
-                }
-            }
-        }
-
-        let meta_data = json!({
-            "veri-name": veri_name,
-            "dependencies": all_deps,
-            "visible": true,
-        });
-
-        let meta_file = path.with_extension("meta.verilib");
-        let content = serde_json::to_string_pretty(&meta_data)?;
-        std::fs::write(&meta_file, content)?;
-
-        // Write atom file with content
-        let atom_content = node_info
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let atom_file = path.with_extension("atom.verilib");
-        std::fs::write(&atom_file, atom_content)?;
-
-        created_count += 1;
-    }
-
-    println!("Metadata files created: {}", created_count);
-    println!("Skipped: {}", skipped_count);
-
-    Ok(())
-}
-
 // =============================================================================
 // Dalek-lite atomize
 // =============================================================================
@@ -249,42 +184,39 @@ fn run_dalek_atomize(
     let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
     let probe_index = generate_probe_index(&probe_atoms);
 
-    match structure_form {
+    // Load structure from appropriate source based on form
+    let structure: HashMap<String, Value> = match structure_form {
         StructureForm::Json => {
             if !config.structure_json_path.exists() {
                 bail!("{} not found", config.structure_json_path.display());
             }
-
             println!("Loading structure from {}...", config.structure_json_path.display());
             let content = std::fs::read_to_string(&config.structure_json_path)?;
-            let structure: HashMap<String, Value> = serde_json::from_str(&content)?;
-
-            // Sync to get code-names (in memory)
-            println!("Syncing structure with probe atoms...");
-            let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
-
-            println!("Enriching structure with atom metadata...");
-            let enriched = enrich_structure_json(&structure, &probe_atoms)?;
-
-            println!("Saving enriched structure to {}...", config.structure_json_path.display());
-            let content = serde_json::to_string_pretty(&enriched)?;
-            std::fs::write(&config.structure_json_path, content)?;
-            println!("Done.");
+            serde_json::from_str(&content)?
         }
         StructureForm::Files => {
-            if update_stubs {
-                println!(
-                    "Syncing structure files in {} with probe atoms...",
-                    config.structure_root.display()
-                );
-                sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
-            }
-
-            println!("Populating structure metadata files...");
-            populate_structure_files_metadata(&probe_atoms, &probe_index, &config.structure_root, project_root)?;
-            println!("Done.");
+            println!("Loading structure from {}...", config.structure_root.display());
+            load_structure_from_files(&config.structure_root)?
         }
+    };
+
+    // Sync to get code-names (in memory)
+    println!("Syncing structure with probe atoms...");
+    let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
+
+    // Optionally update .md files with code-name
+    if update_stubs && structure_form == StructureForm::Files {
+        println!("Updating structure files with code-names...");
+        sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
     }
+
+    println!("Enriching structure with atom metadata...");
+    let enriched = enrich_structure_json(&structure, &probe_atoms)?;
+
+    println!("Saving enriched structure to {}...", config.structure_json_path.display());
+    let content = serde_json::to_string_pretty(&enriched)?;
+    std::fs::write(&config.structure_json_path, content)?;
+    println!("Done.");
 
     Ok(())
 }
@@ -387,6 +319,37 @@ fn generate_probe_index(probe_atoms: &HashMap<String, Value>) -> HashMap<String,
         .into_iter()
         .map(|(k, v)| (k, v.into_iter().collect()))
         .collect()
+}
+
+/// Load structure from .md files into a HashMap.
+fn load_structure_from_files(structure_root: &Path) -> Result<HashMap<String, Value>> {
+    let mut structure = HashMap::new();
+
+    for entry in walkdir::WalkDir::new(structure_root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.extension().map_or(false, |ext| ext == "md") {
+            continue;
+        }
+
+        let frontmatter = match parse_frontmatter(path) {
+            Ok(fm) => fm,
+            Err(_) => continue,
+        };
+
+        // Get relative path from structure_root
+        let relative_path = path
+            .strip_prefix(structure_root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+
+        structure.insert(relative_path, json!(frontmatter));
+    }
+
+    Ok(structure)
 }
 
 /// Update a structure entry with probe atom data.
@@ -684,121 +647,3 @@ fn enrich_structure_json(
     Ok(result)
 }
 
-/// Generate metadata files for each structure .md file.
-fn populate_structure_files_metadata(
-    probe_atoms: &HashMap<String, Value>,
-    probe_index: &HashMap<String, IntervalTree<u32, String>>,
-    structure_root: &Path,
-    project_root: &Path,
-) -> Result<()> {
-    let mut created_count = 0;
-    let mut skipped_count = 0;
-
-    for entry in walkdir::WalkDir::new(structure_root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if !path.extension().map_or(false, |ext| ext == "md") {
-            continue;
-        }
-
-        let frontmatter = match parse_frontmatter(path) {
-            Ok(fm) => fm,
-            Err(_) => {
-                skipped_count += 1;
-                continue;
-            }
-        };
-
-        // Try to get code-name from frontmatter, or look it up from probe_index
-        let probe_name: String = match frontmatter.get("code-name").and_then(|v| v.as_str()) {
-            Some(name) => name.to_string(),
-            None => {
-                // Look up code-name from probe_index using code-path and code-line
-                let code_path = frontmatter.get("code-path").and_then(|v| v.as_str());
-                let line_start = frontmatter.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
-
-                match (code_path, line_start) {
-                    (Some(cp), Some(ls)) => {
-                        if let Some(tree) = probe_index.get(cp) {
-                            let matching: Vec<_> = tree
-                                .query(ls..ls + 1)
-                                .filter(|iv| iv.range.start == ls)
-                                .collect();
-                            if !matching.is_empty() {
-                                matching[0].value.clone()
-                            } else {
-                                eprintln!("WARNING: No atom found at {}:{} for {}", cp, ls, path.display());
-                                skipped_count += 1;
-                                continue;
-                            }
-                        } else {
-                            eprintln!("WARNING: code-path '{}' not in probe_index for {}", cp, path.display());
-                            skipped_count += 1;
-                            continue;
-                        }
-                    }
-                    _ => {
-                        eprintln!("WARNING: Missing code-name and code-path/code-line for {}", path.display());
-                        skipped_count += 1;
-                        continue;
-                    }
-                }
-            }
-        };
-
-        let meta_data = match generate_enriched_entry(&probe_name, probe_atoms)? {
-            Some(md) => md,
-            None => {
-                eprintln!("WARNING: Missing code-path or line info for {}", path.display());
-                skipped_count += 1;
-                continue;
-            }
-        };
-
-        // Write metadata file
-        let meta_file = path.with_extension("meta.verilib");
-        let content = serde_json::to_string_pretty(&meta_data)?;
-        std::fs::write(&meta_file, content)?;
-
-        // Extract and write code content
-        let code_path = meta_data
-            .get("code-path")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let lines_start = meta_data
-            .get("code-lines")
-            .and_then(|cl| cl.get("start"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let lines_end = meta_data
-            .get("code-lines")
-            .and_then(|cl| cl.get("end"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-
-        let source_file = project_root.join(code_path);
-        if source_file.exists() {
-            let source_content = std::fs::read_to_string(&source_file)?;
-            let lines: Vec<&str> = source_content.lines().collect();
-
-            if lines_start > 0 && lines_end <= lines.len() {
-                let extracted: Vec<&str> = lines[lines_start - 1..lines_end].to_vec();
-                let atom_content = extracted.join("\n");
-
-                let atom_file = path.with_extension("atom.verilib");
-                std::fs::write(&atom_file, atom_content)?;
-            }
-        } else {
-            eprintln!("WARNING: Source file not found: {}", source_file.display());
-        }
-
-        created_count += 1;
-    }
-
-    println!("Metadata files created: {}", created_count);
-    println!("Skipped: {}", skipped_count);
-
-    Ok(())
-}

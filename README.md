@@ -187,27 +187,26 @@ verilib-structure atomize [PROJECT_ROOT] [--update-stubs]
 
 | Option | Description |
 |--------|-------------|
-| `-s`, `--update-stubs` | Update structure files (.md or stubs.json) with code-name from atoms |
+| `-s`, `--update-stubs` | Update .md structure files with code-name from atoms (files form only) |
 
-**Structure forms (from config):**
+**Output:**
 
-- `json`: Enriches `<project_root>/.verilib/stubs.json` with atom metadata
-- `files`: Generates companion `.meta.verilib` and `.atom.verilib` files
+Always generates `<project_root>/.verilib/stubs.json` with enriched metadata, regardless of structure form. When form is `files`, the structure is loaded from `.md` files; when form is `json`, it's loaded from the existing `stubs.json`.
 
 **Examples:**
 
 ```bash
-# Generate metadata files (current directory)
+# Generate enriched stubs.json (current directory)
 verilib-structure atomize
 
-# Also update .md files with code-name
+# Also update .md files with code-name (files form only)
 verilib-structure atomize --update-stubs
 
-# Update structure for a specific project
+# Process a specific project
 verilib-structure atomize /path/to/project
 ```
 
-**Enriched stubs.json format (dalek-lite, json):**
+**Enriched stubs.json format (dalek-lite):**
 
 ```json
 {
@@ -222,9 +221,7 @@ verilib-structure atomize /path/to/project
 }
 ```
 
-**Generated metadata format (blueprint, json):**
-
-The `structure_meta.json` file maps veri-name to metadata:
+**Enriched stubs.json format (blueprint):**
 
 ```json
 {
@@ -234,13 +231,6 @@ The `structure_meta.json` file maps veri-name to metadata:
   }
 }
 ```
-
-**Generated files (files form):**
-
-For each `XXX.md` file, creates:
-
-- `XXX.meta.verilib`: JSON metadata
-- `XXX.atom.verilib`: Source code (dalek-lite) or content from blueprint.json (blueprint)
 
 ### specify
 
