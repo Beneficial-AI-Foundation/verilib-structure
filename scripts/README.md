@@ -45,7 +45,7 @@ uv run scripts/structure.py <command> [options]
 | `specify` | Check specification status and manage spec certs |
 | `verify` | Run verification and manage verification certs |
 
-### create
+## create
 
 Generates structure files from source analysis. Supports two structure types:
 
@@ -148,7 +148,7 @@ dependencies: [veri:dep1, veri:dep2]
 <content from blueprint>
 ```
 
-### atomize
+## atomize
 
 Enriches structure files with metadata. Behavior depends on structure type:
 
@@ -217,7 +217,7 @@ uv run scripts/structure.py atomize /path/to/project
 }
 ```
 
-### specify
+## specify
 
 Checks specification status and manages specification certs. Behavior depends on structure type:
 
@@ -276,7 +276,7 @@ When prompted, you can enter:
 - `all` to select all uncertified functions
 - `none` or empty to skip
 
-### verify
+## verify
 
 Runs verification and automatically manages verification certs. Behavior depends on structure type:
 
