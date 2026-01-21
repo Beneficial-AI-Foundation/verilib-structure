@@ -172,7 +172,7 @@ verilib-structure atomize /path/to/project
 {
   "path/to/function_name.md": {
     "code-path": "curve25519-dalek/src/montgomery.rs",
-    "code-lines": { "start": 42, "end": 50 },
+    "code-text": { "lines-start": 42, "lines-end": 50 },
     "code-name": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()",
     "code-module": "montgomery",
     "dependencies": ["probe:dep1", "probe:dep2"],
@@ -275,7 +275,7 @@ After verification, each stub entry gains a `verified` field:
 {
   "path/to/function_name.md": {
     "code-path": "curve25519-dalek/src/montgomery.rs",
-    "code-lines": { "start": 42, "end": 50 },
+    "code-text": { "lines-start": 42, "lines-end": 50 },
     "code-name": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()",
     "verified": true
   }
@@ -324,12 +324,13 @@ VERIFICATION STATUS CHANGES
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
+
    verilib-structure create
    ```
 
 2. Run atomization checks
    ```
-   verilib-structure atomize
+   verilib-structure atomize --update-stubs
    ```
 
 3. Run specification checks

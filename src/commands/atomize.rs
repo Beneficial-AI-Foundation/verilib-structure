@@ -301,9 +301,9 @@ fn build_enriched_entry(code_name: &str, atom: &Value) -> Value {
 
     json!({
         "code-path": code_path,
-        "code-lines": {
-            "start": lines_start,
-            "end": lines_end,
+        "code-text": {
+            "lines-start": lines_start,
+            "lines-end": lines_end,
         },
         "code-name": code_name,
         "code-module": code_module,
