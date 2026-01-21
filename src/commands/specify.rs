@@ -130,14 +130,22 @@ fn collect_certifications(
             .get("code-path")
             .and_then(|v| v.as_str())
             .unwrap_or("?");
-        let lines_start = stub
-            .get("spec-text")
+        let spec_text = stub.get("spec-text");
+        let lines_start = spec_text
             .and_then(|v| v.get("lines-start"))
             .and_then(|v| v.as_u64())
             .map(|l| l.to_string())
             .unwrap_or_else(|| "?".to_string());
+        let lines_end = spec_text
+            .and_then(|v| v.get("lines-end"))
+            .and_then(|v| v.as_u64())
+            .map(|l| l.to_string())
+            .unwrap_or_else(|| "?".to_string());
 
-        format!("  [{}] {} ({}:{})", i, display_name, code_path, lines_start)
+        format!(
+            "  [{}] {} ({}#L{}-L{})",
+            i, display_name, code_path, lines_start, lines_end
+        )
     })?;
 
     if selected_indices.is_empty() {
