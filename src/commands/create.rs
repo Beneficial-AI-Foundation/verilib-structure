@@ -2,7 +2,7 @@
 //!
 //! Initialize structure files from source analysis.
 
-use crate::config::Config;
+use crate::config::{create_gitignore, Config};
 use crate::frontmatter;
 use crate::utils::{parse_github_link, run_command};
 use anyhow::{bail, Context, Result};
@@ -16,10 +16,19 @@ pub fn run(project_root: PathBuf, root: Option<PathBuf>) -> Result<()> {
         .canonicalize()
         .context("Failed to resolve project root")?;
     let verilib_path = project_root.join(".verilib");
+    std::fs::create_dir_all(&verilib_path).context("Failed to create .verilib directory")?;
 
     let structure_root_relative = root
         .map(|r| r.to_string_lossy().to_string())
         .unwrap_or_else(|| ".verilib/structure".to_string());
+        
+    // Write config file
+    let config = Config::new(&structure_root_relative);
+    let config_path = config.save(&project_root)?;
+    println!("Wrote config to {}", config_path.display());
+
+    // Create .gitignore to exclude generated files from version control
+    create_gitignore(&verilib_path)?;
 
     let tracked_path = project_root.join("functions_to_track.csv");
     if !tracked_path.exists() {
@@ -32,11 +41,6 @@ pub fn run(project_root: PathBuf, root: Option<PathBuf>) -> Result<()> {
     let tracked = read_tracked_csv(&tracked_output_path)?;
     let tracked = disambiguate_names(tracked);
     let structure = tracked_to_structure(&tracked);
-
-    // Write config file
-    let config = Config::new(&structure_root_relative);
-    let config_path = config.save(&project_root)?;
-    println!("Wrote config to {}", config_path.display());
 
     // Generate structure files
     println!("\nGenerating structure files...");
