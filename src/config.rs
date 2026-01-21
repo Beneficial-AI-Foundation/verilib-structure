@@ -78,7 +78,7 @@ impl ConfigPaths {
             structure_root,
             structure_json_path: verilib_path.join("stubs.json"),
             atoms_path: verilib_path.join("atoms.json"),
-            certs_specify_dir: verilib_path.join("certs").join("specify"),
+            certs_specify_dir: verilib_path.join("certs").join("specs"),
             certs_verify_dir: verilib_path.join("certs").join("verify"),
             verilib_path,
         })

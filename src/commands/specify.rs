@@ -61,24 +61,6 @@ pub fn run(project_root: PathBuf) -> Result<()> {
     uncertified_list.sort_by(|a, b| a.0.cmp(&b.0));
 
     let selected_indices = display_menu(&uncertified_list, |i, _name, info| {
-        let has_requires = info
-            .get("has_requires")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let has_ensures = info
-            .get("has_ensures")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let mut spec_types = Vec::new();
-        if has_requires {
-            spec_types.push("requires");
-        }
-        if has_ensures {
-            spec_types.push("ensures");
-        }
-        let spec_str = spec_types.join(", ");
-
         let func_name = info.get("name").and_then(|v| v.as_str()).unwrap_or("?");
         let file_path = info.get("file").and_then(|v| v.as_str()).unwrap_or("?");
         let start_line = info
@@ -87,10 +69,7 @@ pub fn run(project_root: PathBuf) -> Result<()> {
             .map(|l| l.to_string())
             .unwrap_or_else(|| "?".to_string());
 
-        format!(
-            "  [{}] {} ({}:{})\\n      Specs: {}",
-            i, func_name, file_path, start_line, spec_str
-        )
+        format!("  [{}] {} ({}:{})", i, func_name, file_path, start_line)
     })?;
 
     if selected_indices.is_empty() {
@@ -167,20 +146,15 @@ fn run_probe_specify(
     Ok(specs)
 }
 
-/// Filter specs data to only functions that have requires or ensures.
+/// Filter specs data to only functions that are specified.
 fn filter_functions_with_specs(specs_data: &HashMap<String, Value>) -> HashMap<String, Value> {
     specs_data
         .iter()
         .filter(|(_, func_info)| {
-            let has_requires = func_info
-                .get("has_requires")
+            func_info
+                .get("specified")
                 .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let has_ensures = func_info
-                .get("has_ensures")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            has_requires || has_ensures
+                .unwrap_or(false)
         })
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()

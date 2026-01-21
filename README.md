@@ -183,7 +183,7 @@ verilib-structure atomize /path/to/project
 
 ## specify
 
-Checks specification status and manages specification certs. Runs `probe-verus specify` to identify functions with `requires`/`ensures` specs.
+Checks specification status and manages specification certs. Runs `probe-verus specify` to identify functions with specifications.
 
 **Usage:**
 
@@ -199,14 +199,14 @@ verilib-structure specify [PROJECT_ROOT]
 
 **Workflow:**
 
-1. Identifies functions with specs (requires/ensures)
-2. Compares with existing certs in `.verilib/certs/specify/`
+1. Identifies functions with specs (where `specified: true`)
+2. Compares with existing certs in `.verilib/certs/specs/`
 3. Displays a multiple choice menu of uncertified functions
 4. Creates cert files for user-selected functions
 
 **Cert files:**
 
-Certs are stored in `.verilib/certs/specify/` with one JSON file per certified function:
+Certs are stored in `.verilib/certs/specs/` with one JSON file per certified function:
 - Filename: URL-encoded code-name + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
