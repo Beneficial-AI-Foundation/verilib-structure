@@ -56,7 +56,7 @@ verilib-structure <command> [options]
 
 ## create
 
-Generates structure files from source analysis. Analyzes Verus/Rust code via `analyze_verus_specs_proofs.py`.
+Generates `.md` structure files from source analysis. Analyzes Verus/Rust code via `analyze_verus_specs_proofs.py`. Generate supporting `config.json` and `.gitignore` files.
 
 **Usage:**
 
@@ -118,11 +118,11 @@ code-name: null
 
 ## atomize
 
-Generate `stubs.json` file with molecular structure and atom metadata. Optionally, the `.md` stub files can be updated with the `code-name` computed from the `code-path` and `code-line`.
+Generate `stubs.json` file with the molecular structure and enrich it with atom metadata. Optionally, the `.md` stub files can be updated with the stable `code-name` replacing the brittle `code-path` and `code-line` fields.
 
-Runs `probe-verus atomize` to generate atom metadata.
+Runs `probe-verus stubify` to generate `stubs.json` and `probe-verus atomize` to generate atom metadata.
 
-**Note:** Requires `config.json` created by `create`.
+**Note:** Requires `config.json` created by `create` to get `structure-root`.
 
 **Usage:**
 
@@ -144,7 +144,7 @@ verilib-structure atomize [PROJECT_ROOT] [--update-stubs]
 
 **Output:**
 
-Generates `<project_root>/.verilib/stubs.json` with enriched metadata. The structure is loaded from `.md` files.
+Generates `<project_root>/.verilib/stubs.json` with enriched metadata. 
 
 **Examples:**
 
