@@ -23,15 +23,17 @@ verilib-structure verify [project_root] [--verify-only-module <module>]
 
 1. **create** - Generates initial structure from source analysis
    - Calls `<project>/scripts/analyze_verus_specs_proofs.py` CLI
-   - Creates `.md` files with `code-path`, `code-line`, `code-name` frontmatter
+   - Creates `.md` files with `code-path`, `code-line` frontmatter
 
 2. **atomize** - Enriches structure with metadata
    - Runs `probe-verus atomize`, populates `code-name` and code metadata
    - Generates `stubs.json` with enriched entries
+   - With `--update-stubs`: updates `.md` files with `code-name` and removes `code-path`/`code-line`
 
 3. **specify** - Manages specification certs
    - Runs `probe-verus specify` (checks `specified` field)
    - Creates certs for functions with specs
+   - Updates `stubs.json` with `specified` field based on certification status
 
 4. **verify** - Updates stubs.json with verification status
    - Runs `probe-verus verify`
@@ -41,7 +43,7 @@ verilib-structure verify [project_root] [--verify-only-module <module>]
 
 All data lives in `.verilib/` within the target project:
 - `config.json` - Structure root path
-- `stubs.json` - Enriched structure from atomization (includes `verified` field after verify)
+- `stubs.json` - Enriched structure from atomization (includes `specified` after specify, `verified` after verify)
 - `tracked_functions.csv` - Tracked functions
 - `certs/specs/` - Specification certificates
 

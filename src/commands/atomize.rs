@@ -360,6 +360,8 @@ fn update_structure_files(
         let mut metadata: HashMap<String, Value> =
             fm.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         metadata.insert("code-name".to_string(), json!(code_name));
+        metadata.remove("code-line");
+        metadata.remove("code-path");
 
         frontmatter::write(&path, &metadata, body.as_deref())?;
         updated_count += 1;
