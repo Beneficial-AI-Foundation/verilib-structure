@@ -70,7 +70,7 @@ Generates structure files from source analysis. Supports two structure types:
 **Usage:**
 
 ```bash
-verilib-structure create [PROJECT_ROOT] --type <type> [--form <form>] [--root <root>]
+verilib-structure create [PROJECT_ROOT] --type <type> [--root <root>]
 ```
 
 **Arguments:**
@@ -84,13 +84,7 @@ verilib-structure create [PROJECT_ROOT] --type <type> [--form <form>] [--root <r
 | Option | Values | Description |
 |--------|--------|-------------|
 | `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
-| `--form` | `json`, `files` | Structure form (default: `files`) |
 | `--root` | path | Root directory for structure files (default: `.verilib/structure`, ignored for blueprint which uses `blueprint`) |
-
-**Structure forms:**
-
-- `json`: Writes structure dictionary to `<project_root>/.verilib/stubs.json`
-- `files`: Creates a hierarchy of `.md` files under the root directory
 
 **Config file:**
 
@@ -98,7 +92,6 @@ Creates `<project_root>/.verilib/config.json` with:
 ```json
 {
   "structure-type": "dalek-lite",
-  "structure-form": "files",
   "structure-root": ".verilib/structure"
 }
 ```
@@ -117,20 +110,14 @@ proofs.json
 **Examples:**
 
 ```bash
-# Dalek-lite: Generate .md file hierarchy (default)
+# Dalek-lite: Generate .md file hierarchy
 verilib-structure create --type dalek-lite
 
-# Dalek-lite: Generate JSON structure file
-verilib-structure create --type dalek-lite --form json
-
-# Blueprint: Generate .md file hierarchy (default)
+# Blueprint: Generate .md file hierarchy
 verilib-structure create --type blueprint
-
-# Blueprint: Generate JSON structure file
-verilib-structure create --type blueprint --form json
 ```
 
-**Generated file format (dalek-lite, files):**
+**Generated file format (dalek-lite):**
 
 ```yaml
 ---
@@ -140,7 +127,7 @@ code-name: null
 ---
 ```
 
-**Generated file format (blueprint, files):**
+**Generated file format (blueprint):**
 
 ```yaml
 ---
@@ -150,18 +137,6 @@ dependencies: [veri:dep1, veri:dep2]
 <content from blueprint>
 ```
 
-**Generated stubs.json (dalek-lite, json):**
-
-```json
-{
-  "path/to/function_name.md": {
-    "code-path": "path/to/source/file.rs",
-    "code-line": 42,
-    "code-name": null
-  }
-}
-```
-
 ### atomize
 
 Enriches structure files with metadata. Behavior depends on structure type:
@@ -169,7 +144,7 @@ Enriches structure files with metadata. Behavior depends on structure type:
 - **dalek-lite**: Runs `probe-verus atomize` to generate atom data, enriches structure with metadata
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
-**Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
+**Note:** Requires `config.json` created by `create`. The type is read from `structure-type` field in the config file.
 
 **Usage:**
 
@@ -187,11 +162,11 @@ verilib-structure atomize [PROJECT_ROOT] [--update-stubs]
 
 | Option | Description |
 |--------|-------------|
-| `-s`, `--update-stubs` | Update .md structure files with code-name from atoms (files form only) |
+| `-s`, `--update-stubs` | Update .md structure files with code-name from atoms |
 
 **Output:**
 
-Always generates `<project_root>/.verilib/stubs.json` with enriched metadata, regardless of structure form. When form is `files`, the structure is loaded from `.md` files; when form is `json`, it's loaded from the existing `stubs.json`.
+Generates `<project_root>/.verilib/stubs.json` with enriched metadata. The structure is loaded from `.md` files.
 
 **Examples:**
 
@@ -199,7 +174,7 @@ Always generates `<project_root>/.verilib/stubs.json` with enriched metadata, re
 # Generate enriched stubs.json (current directory)
 verilib-structure atomize
 
-# Also update .md files with code-name (files form only)
+# Also update .md files with code-name
 verilib-structure atomize --update-stubs
 
 # Process a specific project
@@ -385,7 +360,7 @@ Total certs: 10 → 13
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
-   verilib-structure create --type dalek-lite --form files
+   verilib-structure create --type dalek-lite
    ```
 
 2. Run atomization checks

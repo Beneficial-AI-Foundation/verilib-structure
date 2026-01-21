@@ -11,7 +11,7 @@ Verilib-structure is a toolkit for managing formal verification workflows. It tr
 The main script `structure.py` provides four subcommands:
 
 ```bash
-uv run scripts/structure.py create --type dalek-lite --form files
+uv run scripts/structure.py create --type dalek-lite
 uv run scripts/structure.py create --type blueprint
 uv run scripts/structure.py atomize [project_root]
 uv run scripts/structure.py specify [project_root]
@@ -50,19 +50,16 @@ The script is self-contained with PEP 723 inline metadata (dependencies declared
 ### Data Storage
 
 All data lives in `.verilib/` within the target project:
-- `config.json` - Structure type, form, and root path
+- `config.json` - Structure type and root path
 - `stubs.json` - Enriched structure from atomization
 - `blueprint.json` - Blueprint dependency graph (blueprint type only)
 - `tracked_functions.csv` - Tracked functions (dalek-lite type only)
 - `certs/specify/` - Specification certificates
 - `certs/verify/` - Verification certificates
 
-### Structure Forms
+### Structure Files
 
-- **json**: Single `stubs.json` file
-- **files**: Hierarchy of `.md` files with YAML frontmatter
-
-Both forms generate enriched `stubs.json` during atomization.
+Structure is stored as a hierarchy of `.md` files with YAML frontmatter under the structure root directory. Atomization generates enriched `stubs.json` with metadata.
 
 ### External Dependencies
 

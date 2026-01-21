@@ -4,7 +4,7 @@
 
 use crate::config::Config;
 use crate::utils::{check_leanblueprint_installed, parse_github_link, run_command, write_frontmatter_file};
-use crate::{StructureForm, StructureType};
+use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -16,13 +16,11 @@ use std::path::{Path, PathBuf};
 pub fn run(
     project_root: PathBuf,
     structure_type: StructureType,
-    form: StructureForm,
     root: Option<PathBuf>,
 ) -> Result<()> {
     let project_root = project_root.canonicalize()
         .context("Failed to resolve project root")?;
     let verilib_path = project_root.join(".verilib");
-    let structure_json_path = verilib_path.join("stubs.json");
 
     let (structure, structure_root_relative) = match structure_type {
         StructureType::Blueprint => {
@@ -67,21 +65,14 @@ pub fn run(
     };
 
     // Write config file
-    let config = Config::new(structure_type, form, &structure_root_relative);
+    let config = Config::new(structure_type, &structure_root_relative);
     let config_path = config.save(&project_root)?;
     println!("Wrote config to {}", config_path.display());
 
-    // Generate structure output
-    println!("\nGenerating structure output...");
-    match form {
-        StructureForm::Json => {
-            generate_structure_json(&structure, &structure_json_path)?;
-        }
-        StructureForm::Files => {
-            let structure_root = project_root.join(&structure_root_relative);
-            generate_structure_files(&structure, &structure_root)?;
-        }
-    }
+    // Generate structure files
+    println!("\nGenerating structure files...");
+    let structure_root = project_root.join(&structure_root_relative);
+    generate_structure_files(&structure, &structure_root)?;
 
     Ok(())
 }
@@ -598,18 +589,5 @@ fn generate_structure_files(structure: &HashMap<String, Value>, structure_root: 
     }
 
     println!("Created {} structure files in {}", created_count, structure_root.display());
-    Ok(())
-}
-
-/// Write structure dictionary to a JSON file.
-fn generate_structure_json(structure: &HashMap<String, Value>, output_path: &Path) -> Result<()> {
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let content = serde_json::to_string_pretty(structure)?;
-    std::fs::write(output_path, content)?;
-    println!("Wrote structure to {}", output_path.display());
-
     Ok(())
 }

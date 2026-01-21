@@ -55,7 +55,7 @@ Generates structure files from source analysis. Supports two structure types:
 **Usage:**
 
 ```bash
-uv run scripts/structure.py create [project_root] --type <type> [--form <form>] [--root <root>]
+uv run scripts/structure.py create [project_root] --type <type> [--root <root>]
 ```
 
 **Arguments:**
@@ -69,13 +69,7 @@ uv run scripts/structure.py create [project_root] --type <type> [--form <form>] 
 | Option | Values | Description |
 |--------|--------|-------------|
 | `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
-| `--form` | `json`, `files` | Structure form (default: `files`) |
 | `--root` | path | Root directory for structure files (default: `.verilib/structure`, ignored for blueprint which uses `blueprint`) |
-
-**Structure forms:**
-
-- `json`: Writes structure dictionary to `<project_root>/.verilib/stubs.json`
-- `files`: Creates a hierarchy of `.md` files under the root directory
 
 **Config file:**
 
@@ -83,7 +77,6 @@ Creates `<project_root>/.verilib/config.json` with:
 ```json
 {
   "structure-type": "dalek-lite",
-  "structure-form": "files",
   "structure-root": ".verilib/structure"
 }
 ```
@@ -102,17 +95,11 @@ proofs.json
 **Examples:**
 
 ```bash
-# Dalek-lite: Generate .md file hierarchy (default)
+# Dalek-lite: Generate .md file hierarchy
 uv run scripts/structure.py create --type dalek-lite
 
-# Dalek-lite: Generate JSON structure file
-uv run scripts/structure.py create --type dalek-lite --form json
-
-# Blueprint: Generate .md file hierarchy (default)
+# Blueprint: Generate .md file hierarchy
 uv run scripts/structure.py create --type blueprint
-
-# Blueprint: Generate JSON structure file
-uv run scripts/structure.py create --type blueprint --form json
 ```
 
 **Generated file format (dalek-lite):**
@@ -142,7 +129,7 @@ Enriches structure files with metadata. Behavior depends on structure type:
 - **dalek-lite**: Runs `probe-verus atomize` to generate atom data, enriches structure with metadata
 - **blueprint**: Reads `blueprint.json` to generate metadata with `veri-name` and dependencies
 
-**Note:** Requires `config.json` created by `create`. The type and form are read from `structure-type` and `structure-form` fields in the config file.
+**Note:** Requires `config.json` created by `create`. The type is read from `structure-type` field in the config file.
 
 **Usage:**
 
@@ -160,11 +147,11 @@ uv run scripts/structure.py atomize [project_root] [--update-stubs]
 
 | Option | Description |
 |--------|-------------|
-| `-s`, `--update-stubs` | Update .md structure files with code-name from atoms (files form only) |
+| `-s`, `--update-stubs` | Update .md structure files with code-name from atoms |
 
 **Output:**
 
-Always generates `<project_root>/.verilib/stubs.json` with enriched metadata, regardless of structure form. When form is `files`, the structure is loaded from `.md` files; when form is `json`, it's loaded from the existing `stubs.json`.
+Generates `<project_root>/.verilib/stubs.json` with enriched metadata. The structure is loaded from `.md` files.
 
 **Examples:**
 
@@ -172,7 +159,7 @@ Always generates `<project_root>/.verilib/stubs.json` with enriched metadata, re
 # Generate enriched stubs.json (current directory)
 uv run scripts/structure.py atomize
 
-# Also update .md files with code-name (files form only)
+# Also update .md files with code-name
 uv run scripts/structure.py atomize --update-stubs
 
 # Process a specific project
@@ -359,7 +346,7 @@ Total certs: 10 → 13
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
-   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type dalek-lite --form files
+   uv run $VERILIB_STRUCTURE_PATH/scripts/structure.py create --type dalek-lite
    ```
 
 2. Run atomization checks

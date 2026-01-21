@@ -22,7 +22,6 @@ pub fn run(project_root: PathBuf) -> Result<()> {
     let config = ConfigPaths::load(&project_root)?;
 
     let structure_type = config.config.get_structure_type()?;
-    let structure_form = config.config.get_structure_form()?;
 
     let functions_in_structure = match structure_type {
         StructureType::Blueprint => {
@@ -34,9 +33,7 @@ pub fn run(project_root: PathBuf) -> Result<()> {
 
             let structure_names = get_structure_names(
                 structure_type,
-                structure_form,
                 &config.structure_root,
-                &config.structure_json_path,
             )?;
             println!("Found {} functions in structure", structure_names.len());
 
@@ -64,9 +61,7 @@ pub fn run(project_root: PathBuf) -> Result<()> {
 
             let structure_names = get_structure_names(
                 structure_type,
-                structure_form,
                 &config.structure_root,
-                &config.structure_json_path,
             )?;
             println!("Found {} functions in structure", structure_names.len());
 

@@ -22,7 +22,6 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
     let config = ConfigPaths::load(&project_root)?;
 
     let structure_type = config.config.get_structure_type()?;
-    let structure_form = config.config.get_structure_form()?;
 
     let (verified_funcs, failed_funcs) = match structure_type {
         StructureType::Blueprint => {
@@ -50,9 +49,7 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
 
     let structure_names = get_structure_names(
         structure_type,
-        structure_form,
         &config.structure_root,
-        &config.structure_json_path,
     )?;
     println!("  Functions in structure: {}", structure_names.len());
 

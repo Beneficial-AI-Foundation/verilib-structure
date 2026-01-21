@@ -37,10 +37,6 @@ enum Commands {
         #[arg(long = "type", value_enum)]
         structure_type: StructureType,
 
-        /// Structure form: 'json' or 'files' (default: files)
-        #[arg(long, value_enum, default_value = "files")]
-        form: StructureForm,
-
         /// Root directory for structure files (default: .verilib/structure)
         #[arg(long)]
         root: Option<PathBuf>,
@@ -52,7 +48,7 @@ enum Commands {
         #[arg(default_value = ".")]
         project_root: PathBuf,
 
-        /// Update structure files (.md or stubs.json) with code-name from atoms
+        /// Update .md structure files with code-name from atoms
         #[arg(short = 's', long)]
         update_stubs: bool,
     },
@@ -93,23 +89,6 @@ impl std::fmt::Display for StructureType {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum StructureForm {
-    #[value(name = "json")]
-    Json,
-    #[value(name = "files")]
-    Files,
-}
-
-impl std::fmt::Display for StructureForm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StructureForm::Json => write!(f, "json"),
-            StructureForm::Files => write!(f, "files"),
-        }
-    }
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -117,9 +96,8 @@ fn main() -> Result<()> {
         Commands::Create {
             project_root,
             structure_type,
-            form,
             root,
-        } => commands::create::run(project_root, structure_type, form, root),
+        } => commands::create::run(project_root, structure_type, root),
 
         Commands::Atomize { project_root, update_stubs } => commands::atomize::run(project_root, update_stubs),
 

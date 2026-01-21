@@ -5,7 +5,7 @@
 use crate::config::constants::PROBE_PREFIX;
 use crate::config::ConfigPaths;
 use crate::utils::{check_probe_verus_or_exit, parse_frontmatter, run_command};
-use crate::{StructureForm, StructureType};
+use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use intervaltree::IntervalTree;
 use serde_json::{json, Value};
@@ -19,14 +19,13 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
     let config = ConfigPaths::load(&project_root)?;
 
     let structure_type = config.config.get_structure_type()?;
-    let structure_form = config.config.get_structure_form()?;
 
     match structure_type {
         StructureType::Blueprint => {
-            run_blueprint_atomize(&config, structure_form)?;
+            run_blueprint_atomize(&config)?;
         }
         StructureType::DalekLite => {
-            run_dalek_atomize(&project_root, &config, structure_form, update_stubs)?;
+            run_dalek_atomize(&project_root, &config, update_stubs)?;
         }
     }
 
@@ -37,7 +36,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
 // Blueprint atomize
 // =============================================================================
 
-fn run_blueprint_atomize(config: &ConfigPaths, structure_form: StructureForm) -> Result<()> {
+fn run_blueprint_atomize(config: &ConfigPaths) -> Result<()> {
     if !config.blueprint_json_path.exists() {
         bail!(
             "{} not found. Run 'verilib-structure create' first.",
@@ -49,21 +48,9 @@ fn run_blueprint_atomize(config: &ConfigPaths, structure_form: StructureForm) ->
     let content = std::fs::read_to_string(&config.blueprint_json_path)?;
     let blueprint_data: HashMap<String, Value> = serde_json::from_str(&content)?;
 
-    // Load structure from appropriate source based on form
-    let structure: HashMap<String, Value> = match structure_form {
-        StructureForm::Json => {
-            if !config.structure_json_path.exists() {
-                bail!("{} not found", config.structure_json_path.display());
-            }
-            println!("Loading structure from {}...", config.structure_json_path.display());
-            let content = std::fs::read_to_string(&config.structure_json_path)?;
-            serde_json::from_str(&content)?
-        }
-        StructureForm::Files => {
-            println!("Loading structure from {}...", config.structure_root.display());
-            load_blueprint_structure_from_files(&config.structure_root)?
-        }
-    };
+    // Load structure from .md files
+    println!("Loading structure from {}...", config.structure_root.display());
+    let structure = load_blueprint_structure_from_files(&config.structure_root)?;
 
     println!("Populating structure metadata from blueprint...");
     let metadata = populate_blueprint_json_metadata(&structure, &blueprint_data)?;
@@ -177,35 +164,22 @@ fn populate_blueprint_json_metadata(
 fn run_dalek_atomize(
     project_root: &Path,
     config: &ConfigPaths,
-    structure_form: StructureForm,
     update_stubs: bool,
 ) -> Result<()> {
     let probe_atoms = generate_probe_atoms(project_root, &config.atoms_path)?;
     let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
     let probe_index = generate_probe_index(&probe_atoms);
 
-    // Load structure from appropriate source based on form
-    let structure: HashMap<String, Value> = match structure_form {
-        StructureForm::Json => {
-            if !config.structure_json_path.exists() {
-                bail!("{} not found", config.structure_json_path.display());
-            }
-            println!("Loading structure from {}...", config.structure_json_path.display());
-            let content = std::fs::read_to_string(&config.structure_json_path)?;
-            serde_json::from_str(&content)?
-        }
-        StructureForm::Files => {
-            println!("Loading structure from {}...", config.structure_root.display());
-            load_structure_from_files(&config.structure_root)?
-        }
-    };
+    // Load structure from .md files
+    println!("Loading structure from {}...", config.structure_root.display());
+    let structure = load_structure_from_files(&config.structure_root)?;
 
     // Sync to get code-names (in memory)
     println!("Syncing structure with probe atoms...");
     let structure = sync_structure_json_with_atoms(structure, &probe_index, &probe_atoms)?;
 
     // Optionally update .md files with code-name
-    if update_stubs && structure_form == StructureForm::Files {
+    if update_stubs {
         println!("Updating structure files with code-names...");
         sync_structure_files_with_atoms(&probe_index, &probe_atoms, &config.structure_root)?;
     }

@@ -28,7 +28,7 @@ For blueprint type:
     - Uses blueprint.json for specs and verification status
 
 Usage:
-    uv run scripts/structure.py create --type dalek-lite --form files
+    uv run scripts/structure.py create --type dalek-lite
     uv run scripts/structure.py create --type blueprint
     uv run scripts/structure.py atomize [project_root]
     uv run scripts/structure.py specify [project_root]
@@ -164,18 +164,14 @@ def create_cert(certs_dir: Path, name: str) -> Path:
 
 def get_structure_names(
     structure_type: str,
-    structure_form: str,
     structure_root: Path,
-    structure_json_path: Path
 ) -> set[str]:
     """
-    Get the set of identifier names from the structure.
+    Get the set of identifier names from the structure files.
 
     Args:
         structure_type: Either "dalek-lite" or "blueprint".
-        structure_form: Either "json" or "files".
-        structure_root: Path to the structure root directory (for files form).
-        structure_json_path: Path to stubs.json (for json form).
+        structure_root: Path to the structure root directory.
 
     Returns:
         Set of identifier names defined in the structure (code-name or veri-name).
@@ -185,29 +181,15 @@ def get_structure_names(
 
     names = set()
 
-    if structure_form == "json":
-        if not structure_json_path.exists():
-            print(f"Warning: {structure_json_path} not found")
-            return names
+    if not structure_root.exists():
+        print(f"Warning: {structure_root} not found")
+        return names
 
-        with open(structure_json_path, encoding='utf-8') as f:
-            structure = json.load(f)
-
-        for entry in structure.values():
-            name = entry.get(name_field)
-            if name:
-                names.add(name)
-
-    elif structure_form == "files":
-        if not structure_root.exists():
-            print(f"Warning: {structure_root} not found")
-            return names
-
-        for md_file in structure_root.rglob("*.md"):
-            post = frontmatter.load(md_file)
-            name = post.get(name_field)
-            if name:
-                names.add(name)
+    for md_file in structure_root.rglob("*.md"):
+        post = frontmatter.load(md_file)
+        name = post.get(name_field)
+        if name:
+            names.add(name)
 
     return names
 
@@ -222,7 +204,6 @@ def load_config(project_root: Path) -> dict:
     Returns:
         Dictionary with config values and computed paths:
             - structure-type: "dalek-lite" or "blueprint"
-            - structure-form: "json" or "files"
             - structure-root: Relative path string
             - verilib_path: Absolute Path to .verilib
             - structure_root: Absolute Path to structure root
@@ -242,11 +223,6 @@ def load_config(project_root: Path) -> dict:
 
     with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
-
-    structure_form = config.get("structure-form")
-    if structure_form not in ("json", "files"):
-        print(f"Error: Unknown form '{structure_form}'", file=sys.stderr)
-        raise SystemExit(1)
 
     structure_root_relative = config.get("structure-root", ".verilib")
 
@@ -825,19 +801,6 @@ def generate_structure_files(structure: dict[str, dict], structure_root: Path) -
     print(f"Created {created_count} structure files in {structure_root}")
 
 
-def generate_structure_json(structure: dict[str, dict], output_path: Path) -> None:
-    """
-    Write structure dictionary to a JSON file.
-
-    Args:
-        structure: Dictionary mapping file_path (str) to flat metadata dict.
-        output_path: Path to write the JSON file.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(structure, indent=2), encoding='utf-8')
-    print(f"Wrote structure to {output_path}")
-
-
 def cmd_create(args: argparse.Namespace) -> None:
     """
     Execute the create subcommand.
@@ -904,17 +867,13 @@ proofs.json
 
     config = {
         "structure-type": args.type,
-        "structure-form": args.form,
         "structure-root": structure_root_relative,
     }
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     print(f"Wrote config to {config_path}")
 
-    print("\nGenerating structure output...")
-    if args.form == "json":
-        generate_structure_json(structure, structure_json_path)
-    elif args.form == "files":
-        generate_structure_files(structure, project_root / structure_root_relative)
+    print("\nGenerating structure files...")
+    generate_structure_files(structure, project_root / structure_root_relative)
 
 
 # =============================================================================
@@ -1304,7 +1263,6 @@ def cmd_atomize(args: argparse.Namespace) -> None:
     config = load_config(project_root)
 
     structure_type = config.get("structure-type")
-    structure_form = config.get("structure-form")
     verilib_path = config["verilib_path"]
     structure_root = config["structure_root"]
     structure_json_path = config["structure_json_path"]
@@ -1319,17 +1277,9 @@ def cmd_atomize(args: argparse.Namespace) -> None:
         with open(blueprint_path, encoding='utf-8') as f:
             blueprint_data = json.load(f)
 
-        # Load structure from appropriate source based on form
-        if structure_form == "json":
-            if not structure_json_path.exists():
-                print(f"Error: {structure_json_path} not found", file=sys.stderr)
-                raise SystemExit(1)
-            print(f"Loading structure from {structure_json_path}...")
-            with open(structure_json_path, encoding='utf-8') as f:
-                structure = json.load(f)
-        else:  # files
-            print(f"Loading structure from {structure_root}...")
-            structure = load_blueprint_structure_from_files(structure_root)
+        # Load structure from .md files
+        print(f"Loading structure from {structure_root}...")
+        structure = load_blueprint_structure_from_files(structure_root)
 
         print("Populating structure metadata from blueprint...")
         metadata = populate_blueprint_json_metadata(structure, blueprint_data)
@@ -1345,23 +1295,15 @@ def cmd_atomize(args: argparse.Namespace) -> None:
         probe_atoms = filter_probe_atoms(probe_atoms, PROBE_PREFIX)
         probe_index = generate_probe_index(probe_atoms)
 
-        # Load structure from appropriate source based on form
-        if structure_form == "json":
-            if not structure_json_path.exists():
-                print(f"Error: {structure_json_path} not found", file=sys.stderr)
-                raise SystemExit(1)
-            print(f"Loading structure from {structure_json_path}...")
-            with open(structure_json_path, encoding='utf-8') as f:
-                structure = json.load(f)
-        else:  # files
-            print(f"Loading structure from {structure_root}...")
-            structure = load_structure_from_files(structure_root)
+        # Load structure from .md files
+        print(f"Loading structure from {structure_root}...")
+        structure = load_structure_from_files(structure_root)
 
         print("Syncing structure with probe atoms...")
         structure = sync_structure_json_with_atoms(structure, probe_index, probe_atoms)
 
         # Optionally update .md files with code-name
-        if update_stubs and structure_form == "files":
+        if update_stubs:
             print("Updating structure files with code-names...")
             sync_structure_files_with_atoms(probe_index, probe_atoms, structure_root)
 
@@ -1575,10 +1517,8 @@ def cmd_specify(args: argparse.Namespace) -> None:
     config = load_config(project_root)
 
     structure_type = config.get("structure-type")
-    structure_form = config.get("structure-form")
     verilib_path = config["verilib_path"]
     structure_root = config["structure_root"]
-    structure_json_path = config["structure_json_path"]
     certs_dir = config["certs_specify_dir"]
 
     if structure_type == "blueprint":
@@ -1586,9 +1526,7 @@ def cmd_specify(args: argparse.Namespace) -> None:
         functions_with_specs = get_blueprint_functions_with_specs(blueprint_path)
         print(f"\nFound {len(functions_with_specs)} functions with specs in blueprint")
 
-        structure_names = get_structure_names(
-            structure_type, structure_form, structure_root, structure_json_path
-        )
+        structure_names = get_structure_names(structure_type, structure_root)
         print(f"Found {len(structure_names)} functions in structure")
 
         functions_in_structure = {
@@ -1606,9 +1544,7 @@ def cmd_specify(args: argparse.Namespace) -> None:
         functions_with_specs = get_functions_with_specs(specs_data)
         print(f"\nFound {len(functions_with_specs)} functions with specs in codebase")
 
-        structure_names = get_structure_names(
-            structure_type, structure_form, structure_root, structure_json_path
-        )
+        structure_names = get_structure_names(structure_type, structure_root)
         print(f"Found {len(structure_names)} functions in structure")
 
         functions_in_structure = {
@@ -1820,10 +1756,8 @@ def cmd_verify(args: argparse.Namespace) -> None:
     config = load_config(project_root)
 
     structure_type = config.get("structure-type")
-    structure_form = config.get("structure-form")
     verilib_path = config["verilib_path"]
     structure_root = config["structure_root"]
-    structure_json_path = config["structure_json_path"]
     certs_dir = config["certs_verify_dir"]
 
     if structure_type == "blueprint":
@@ -1850,9 +1784,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
     print(f"  Verified: {len(verified_funcs)}")
     print(f"  Failed: {len(failed_funcs)}")
 
-    structure_names = get_structure_names(
-        structure_type, structure_form, structure_root, structure_json_path
-    )
+    structure_names = get_structure_names(structure_type, structure_root)
     print(f"  Functions in structure: {len(structure_names)}")
 
     verified_in_structure = verified_funcs & structure_names
@@ -1931,7 +1863,7 @@ Subcommands:
   verify   Run verification and manage verification certs
 
 Examples:
-  uv run scripts/structure.py create --type dalek-lite --form files
+  uv run scripts/structure.py create --type dalek-lite
   uv run scripts/structure.py create --type blueprint
   uv run scripts/structure.py atomize
   uv run scripts/structure.py specify
@@ -1958,12 +1890,6 @@ Examples:
         choices=["dalek-lite", "blueprint"],
         required=True,
         help="Type of the source to analyze"
-    )
-    create_parser.add_argument(
-        "--form",
-        choices=["json", "files"],
-        default="files",
-        help="Structure form: 'json' or 'files' (default: files)"
     )
     create_parser.add_argument(
         "--root",

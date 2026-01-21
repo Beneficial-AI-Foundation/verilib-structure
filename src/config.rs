@@ -1,6 +1,6 @@
 //! Configuration management for verilib structure.
 
-use crate::{StructureForm, StructureType};
+use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -10,9 +10,6 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     #[serde(rename = "structure-type")]
     pub structure_type: String,
-
-    #[serde(rename = "structure-form")]
-    pub structure_form: String,
 
     #[serde(rename = "structure-root")]
     pub structure_root: String,
@@ -33,10 +30,9 @@ pub struct ConfigPaths {
 
 impl Config {
     /// Create a new config with the given parameters
-    pub fn new(structure_type: StructureType, form: StructureForm, root: &str) -> Self {
+    pub fn new(structure_type: StructureType, root: &str) -> Self {
         Self {
             structure_type: structure_type.to_string(),
-            structure_form: form.to_string(),
             structure_root: root.to_string(),
         }
     }
@@ -73,15 +69,6 @@ impl Config {
             other => bail!("Unknown structure type: {}", other),
         }
     }
-
-    /// Get the structure form enum
-    pub fn get_structure_form(&self) -> Result<StructureForm> {
-        match self.structure_form.as_str() {
-            "json" => Ok(StructureForm::Json),
-            "files" => Ok(StructureForm::Files),
-            other => bail!("Unknown structure form: {}", other),
-        }
-    }
 }
 
 impl ConfigPaths {
@@ -102,11 +89,6 @@ impl ConfigPaths {
 
         let config: Config = serde_json::from_str(&content)
             .context("Failed to parse config.json")?;
-
-        // Validate form
-        if config.structure_form != "json" && config.structure_form != "files" {
-            bail!("Unknown form '{}' in config", config.structure_form);
-        }
 
         let structure_root = project_root.join(&config.structure_root);
 

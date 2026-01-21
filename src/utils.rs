@@ -1,7 +1,7 @@
 //! Utility functions for verilib structure.
 
 use crate::config::constants::PROBE_VERUS_REPO;
-use crate::{StructureForm, StructureType};
+use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
@@ -110,12 +110,10 @@ pub fn delete_cert(certs_dir: &Path, name: &str) -> Result<Option<std::path::Pat
     }
 }
 
-/// Get the set of identifier names from the structure.
+/// Get the set of identifier names from the structure files.
 pub fn get_structure_names(
     structure_type: StructureType,
-    structure_form: StructureForm,
     structure_root: &Path,
-    structure_json_path: &Path,
 ) -> Result<HashSet<String>> {
     let name_field = match structure_type {
         StructureType::Blueprint => "veri-name",
@@ -124,39 +122,20 @@ pub fn get_structure_names(
 
     let mut names = HashSet::new();
 
-    match structure_form {
-        StructureForm::Json => {
-            if !structure_json_path.exists() {
-                eprintln!("Warning: {} not found", structure_json_path.display());
-                return Ok(names);
-            }
+    if !structure_root.exists() {
+        eprintln!("Warning: {} not found", structure_root.display());
+        return Ok(names);
+    }
 
-            let content = std::fs::read_to_string(structure_json_path)?;
-            let structure: HashMap<String, Value> = serde_json::from_str(&content)?;
-
-            for entry in structure.values() {
-                if let Some(name) = entry.get(name_field).and_then(|v| v.as_str()) {
+    for entry in walkdir::WalkDir::new(structure_root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "md") {
+            if let Ok(frontmatter) = parse_frontmatter(path) {
+                if let Some(name) = frontmatter.get(name_field).and_then(|v| v.as_str()) {
                     names.insert(name.to_string());
-                }
-            }
-        }
-        StructureForm::Files => {
-            if !structure_root.exists() {
-                eprintln!("Warning: {} not found", structure_root.display());
-                return Ok(names);
-            }
-
-            for entry in walkdir::WalkDir::new(structure_root)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "md") {
-                    if let Ok(frontmatter) = parse_frontmatter(path) {
-                        if let Some(name) = frontmatter.get(name_field).and_then(|v| v.as_str()) {
-                            names.insert(name.to_string());
-                        }
-                    }
                 }
             }
         }
