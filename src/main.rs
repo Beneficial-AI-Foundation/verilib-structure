@@ -5,7 +5,7 @@
 //! - `create`   - Initialize structure files from source analysis
 //! - `atomize`  - Enrich structure files with metadata
 //! - `specify`  - Check specification status and manage spec certs
-//! - `verify`   - Run verification and manage verification certs
+//! - `verify`   - Run verification and update stubs.json with status
 
 mod certs;
 mod commands;
@@ -59,7 +59,7 @@ enum Commands {
         project_root: PathBuf,
     },
 
-    /// Run verification and manage verification certs
+    /// Run verification and update stubs.json with status
     Verify {
         /// Project root directory (default: current working directory)
         #[arg(default_value = ".")]

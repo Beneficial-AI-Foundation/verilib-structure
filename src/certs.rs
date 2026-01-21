@@ -1,6 +1,6 @@
 //! Certificate management for verilib structure.
 //!
-//! Handles creation, deletion, and lookup of specification and verification certificates.
+//! Handles creation and lookup of specification certificates.
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -69,15 +69,3 @@ pub fn create_cert(certs_dir: &Path, name: &str) -> Result<PathBuf> {
     Ok(cert_path)
 }
 
-/// Delete a cert file for a function.
-pub fn delete_cert(certs_dir: &Path, name: &str) -> Result<Option<PathBuf>> {
-    let encoded_name = encode_name(name);
-    let cert_path = certs_dir.join(format!("{}.json", encoded_name));
-
-    if cert_path.exists() {
-        std::fs::remove_file(&cert_path)?;
-        Ok(Some(cert_path))
-    } else {
-        Ok(None)
-    }
-}

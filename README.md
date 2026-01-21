@@ -52,7 +52,7 @@ verilib-structure <command> [options]
 | `create` | Initialize structure files from source analysis |
 | `atomize` | Enrich structure files with metadata |
 | `specify` | Check specification status and manage spec certs |
-| `verify` | Run verification and manage verification certs |
+| `verify` | Run verification and update stubs.json with status |
 
 ## create
 
@@ -230,7 +230,7 @@ When prompted, you can enter:
 
 ## verify
 
-Runs verification and automatically manages verification certs. Runs `probe-verus verify` to check proof status.
+Runs verification and updates `stubs.json` with verification status. Runs `probe-verus verify` to check proof status.
 
 **Usage:**
 
@@ -252,23 +252,40 @@ verilib-structure verify [PROJECT_ROOT] [--verify-only-module <module>]
 
 **Workflow:**
 
-1. Runs probe-verus verify to check verification status
-2. Filters to only functions in the structure
-3. Compares with existing certs in `.verilib/certs/verify/`
-4. Creates new certs for verified functions without certs
-5. Deletes certs for failed functions with existing certs
-6. Shows summary of all changes
+1. Loads existing `stubs.json`
+2. Runs `probe-verus verify` to generate `proofs.json`
+3. For each stub with a `code-name`, looks up verification status from `proofs.json`
+4. Updates `stubs.json` with `verified: true/false` for each stub
+5. Shows summary of newly verified and newly unverified items
 
-**Cert files:**
+**Generated `proofs.json` schema:**
 
-Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
-- Filename: URL-encoded code-name + `.json`
-- Content: `{"timestamp": "<ISO 8601 timestamp>"}`
+```json
+{
+  "probe:crate/version/module#function()": {
+    "verified": true
+  }
+}
+```
+
+**Updated `stubs.json` schema:**
+
+After verification, each stub entry gains a `verified` field:
+```json
+{
+  "path/to/function_name.md": {
+    "code-path": "curve25519-dalek/src/montgomery.rs",
+    "code-lines": { "start": 42, "end": 50 },
+    "code-name": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ct_eq()",
+    "verified": true
+  }
+}
+```
 
 **Examples:**
 
 ```bash
-# Run verification and update certs (current directory)
+# Run verification and update stubs.json (current directory)
 verilib-structure verify
 
 # Run verification for a specific project
@@ -283,21 +300,20 @@ verilib-structure verify --verify-only-module edwards
 The command shows a summary of changes:
 ```
 ============================================================
-VERIFICATION CERT CHANGES
+VERIFICATION STATUS CHANGES
 ============================================================
 
-✓ Created 5 new certs:
+✓ Newly verified (5):
   + func_name
-    probe:crate/version/module#func()
+    path/to/func.md
 
-✗ Deleted 2 certs (verification failed):
+✗ Newly unverified (2):
   - other_func
-    probe:crate/version/module#other_func()
+    path/to/other_func.md
 
 ============================================================
-Total certs: 10 → 13
-  Created: +5
-  Deleted: -2
+  Newly verified: +5
+  Newly unverified: -2
 ============================================================
 ```
 

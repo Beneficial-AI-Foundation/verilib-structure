@@ -30,21 +30,20 @@ verilib-structure verify [project_root] [--verify-only-module <module>]
    - Generates `stubs.json` with enriched entries
 
 3. **specify** - Manages specification certs
-   - Runs `probe-verus specify` (has_requires/has_ensures)
+   - Runs `probe-verus specify` (checks `specified` field)
    - Creates certs for functions with specs
 
-4. **verify** - Manages verification certs
+4. **verify** - Updates stubs.json with verification status
    - Runs `probe-verus verify`
-   - Creates/deletes certs based on verification results
+   - Updates `verified` field in stubs.json for each stub
 
 ### Data Storage
 
 All data lives in `.verilib/` within the target project:
 - `config.json` - Structure root path
-- `stubs.json` - Enriched structure from atomization
+- `stubs.json` - Enriched structure from atomization (includes `verified` field after verify)
 - `tracked_functions.csv` - Tracked functions
-- `certs/specify/` - Specification certificates
-- `certs/verify/` - Verification certificates
+- `certs/specs/` - Specification certificates
 
 ### Structure Files
 

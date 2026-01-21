@@ -1,14 +1,13 @@
 //! Verify subcommand implementation.
 //!
-//! Run verification and manage verification certs.
+//! Run verification and update stubs.json with verification status.
 
-use crate::certs::{create_cert, delete_cert, get_existing_certs};
 use crate::config::ConfigPaths;
 use crate::probe::{self, VERIFY_INTERMEDIATE_FILES};
-use crate::utils::{get_display_name, get_structure_names, run_command};
+use crate::utils::{get_display_name, run_command};
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Run the verify subcommand.
@@ -18,6 +17,18 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         .context("Failed to resolve project root")?;
     let config = ConfigPaths::load(&project_root)?;
 
+    // Load existing stubs.json
+    let stubs_path = &config.structure_json_path;
+    if !stubs_path.exists() {
+        bail!(
+            "{} not found. Run 'verilib-structure atomize' first.",
+            stubs_path.display()
+        );
+    }
+    let stubs_content = std::fs::read_to_string(stubs_path)?;
+    let mut stubs: HashMap<String, Value> = serde_json::from_str(&stubs_content)?;
+
+    // Run probe-verus verify to generate proofs.json
     let proofs_path = config.verilib_path.join("proofs.json");
     let proofs_data = run_probe_verify(
         &project_root,
@@ -25,100 +36,105 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         &config.atoms_path,
         verify_only_module.as_deref(),
     )?;
-    let (verified_funcs, failed_funcs) = partition_verification_results(&proofs_data);
 
-    println!("\nVerification summary:");
-    println!("  Verified: {}", verified_funcs.len());
-    println!("  Failed: {}", failed_funcs.len());
+    // Update stubs with verification status
+    let (newly_verified, newly_unverified) = update_stubs_with_verification(&mut stubs, &proofs_data);
 
-    let structure_names = get_structure_names(&config.structure_root)?;
-    println!("  Functions in structure: {}", structure_names.len());
+    // Save updated stubs.json
+    let stubs_content = serde_json::to_string_pretty(&stubs)?;
+    std::fs::write(stubs_path, stubs_content)?;
+    println!("\nUpdated {}", stubs_path.display());
 
-    let verified_in_structure: HashSet<_> = verified_funcs
-        .intersection(&structure_names)
-        .cloned()
-        .collect();
-    let failed_in_structure: HashSet<_> = failed_funcs
-        .intersection(&structure_names)
-        .cloned()
-        .collect();
-    println!("  Verified in structure: {}", verified_in_structure.len());
-    println!("  Failed in structure: {}", failed_in_structure.len());
-
-    let existing_certs = get_existing_certs(&config.certs_verify_dir)?;
-    println!("  Existing certs: {}", existing_certs.len());
-
-    let to_create: HashSet<_> = verified_in_structure
-        .difference(&existing_certs)
-        .cloned()
-        .collect();
-    let to_delete: HashSet<_> = failed_in_structure
-        .intersection(&existing_certs)
-        .cloned()
-        .collect();
-
-    let mut created = Vec::new();
-    let mut deleted = Vec::new();
-
-    let mut to_create_sorted: Vec<_> = to_create.into_iter().collect();
-    to_create_sorted.sort();
-    for name in to_create_sorted {
-        let cert_path = create_cert(&config.certs_verify_dir, &name)?;
-        created.push((name, cert_path));
-    }
-
-    let mut to_delete_sorted: Vec<_> = to_delete.into_iter().collect();
-    to_delete_sorted.sort();
-    for name in to_delete_sorted {
-        if let Some(cert_path) = delete_cert(&config.certs_verify_dir, &name)? {
-            deleted.push((name, cert_path));
-        }
-    }
-
-    print_cert_changes(&created, &deleted, existing_certs.len());
+    // Print summary
+    print_verification_summary(&newly_verified, &newly_unverified);
 
     Ok(())
 }
 
-/// Print summary of certificate changes.
-fn print_cert_changes(
-    created: &[(String, PathBuf)],
-    deleted: &[(String, PathBuf)],
-    existing_count: usize,
-) {
+/// Update stubs with verification status from proofs data.
+/// Returns (newly_verified, newly_unverified) lists.
+fn update_stubs_with_verification(
+    stubs: &mut HashMap<String, Value>,
+    proofs_data: &HashMap<String, Value>,
+) -> (Vec<String>, Vec<String>) {
+    let mut newly_verified = Vec::new();
+    let mut newly_unverified = Vec::new();
+
+    for (stub_name, stub_data) in stubs.iter_mut() {
+        let stub_obj = match stub_data.as_object_mut() {
+            Some(obj) => obj,
+            None => continue,
+        };
+
+        // Get the code-name for this stub
+        let code_name = match stub_obj.get("code-name").and_then(|v| v.as_str()) {
+            Some(name) => name.to_string(),
+            None => continue,
+        };
+
+        // Get previous verification status
+        let was_verified = stub_obj
+            .get("verified")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // Look up current verification status from proofs.json
+        let is_verified = proofs_data
+            .get(&code_name)
+            .and_then(|v| v.get("verified"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // Update the verified field
+        stub_obj.insert("verified".to_string(), Value::Bool(is_verified));
+
+        // Track changes
+        if is_verified && !was_verified {
+            newly_verified.push(stub_name.clone());
+        } else if !is_verified && was_verified {
+            newly_unverified.push(stub_name.clone());
+        }
+    }
+
+    newly_verified.sort();
+    newly_unverified.sort();
+
+    (newly_verified, newly_unverified)
+}
+
+/// Print summary of verification changes.
+fn print_verification_summary(newly_verified: &[String], newly_unverified: &[String]) {
     println!();
     println!("{}", "=".repeat(60));
-    println!("VERIFICATION CERT CHANGES");
+    println!("VERIFICATION STATUS CHANGES");
     println!("{}", "=".repeat(60));
 
-    if !created.is_empty() {
-        println!("\n✓ Created {} new certs:", created.len());
-        for (name, _) in created {
-            let display_name = get_display_name(name);
+    if !newly_verified.is_empty() {
+        println!("\n✓ Newly verified ({}):", newly_verified.len());
+        for stub_name in newly_verified {
+            let display_name = get_display_name(stub_name);
             println!("  + {}", display_name);
-            println!("    {}", name);
+            println!("    {}", stub_name);
         }
     } else {
-        println!("\n✓ No new certs created");
+        println!("\n  No newly verified items");
     }
 
-    if !deleted.is_empty() {
-        println!("\n✗ Deleted {} certs (verification failed):", deleted.len());
-        for (name, _) in deleted {
-            let display_name = get_display_name(name);
+    if !newly_unverified.is_empty() {
+        println!("\n✗ Newly unverified ({}):", newly_unverified.len());
+        for stub_name in newly_unverified {
+            let display_name = get_display_name(stub_name);
             println!("  - {}", display_name);
-            println!("    {}", name);
+            println!("    {}", stub_name);
         }
     } else {
-        println!("\n✓ No certs deleted");
+        println!("\n  No newly unverified items");
     }
 
     println!();
     println!("{}", "=".repeat(60));
-    let final_certs = existing_count + created.len() - deleted.len();
-    println!("Total certs: {} → {}", existing_count, final_certs);
-    println!("  Created: +{}", created.len());
-    println!("  Deleted: -{}", deleted.len());
+    println!("  Newly verified: +{}", newly_verified.len());
+    println!("  Newly unverified: -{}", newly_unverified.len());
     println!("{}", "=".repeat(60));
 }
 
@@ -182,37 +198,3 @@ fn run_probe_verify(
     Ok(proofs)
 }
 
-/// Partition proofs data into verified and failed function sets.
-///
-/// The proofs.json schema from probe-verus is a dictionary keyed by probe-name:
-/// ```json
-/// {
-///   "probe:crate/version/module/function()": {
-///     "code-path": "string",
-///     "code-line": number,
-///     "verified": boolean,
-///     "status": "success|failure|sorries|warning"
-///   }
-/// }
-/// ```
-fn partition_verification_results(
-    proofs_data: &HashMap<String, Value>,
-) -> (HashSet<String>, HashSet<String>) {
-    let mut verified = HashSet::new();
-    let mut failed = HashSet::new();
-
-    for (probe_name, func_data) in proofs_data {
-        let is_verified = func_data
-            .get("verified")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        if is_verified {
-            verified.insert(probe_name.clone());
-        } else {
-            failed.insert(probe_name.clone());
-        }
-    }
-
-    (verified, failed)
-}
