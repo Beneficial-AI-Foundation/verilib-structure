@@ -86,7 +86,17 @@ verilib-structure create [PROJECT_ROOT] --type <type> [--root <root>]
 | `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
 | `--root` | path | Root directory for structure files (default: `.verilib/structure`, ignored for blueprint which uses `blueprint`) |
 
-**Config file:**
+**Examples:**
+
+```bash
+# Dalek-lite: Generate .md file hierarchy
+verilib-structure create --type dalek-lite
+
+# Blueprint: Generate .md file hierarchy
+verilib-structure create --type blueprint
+```
+
+**Generated `config.json` file:**
 
 Creates `<project_root>/.verilib/config.json` with:
 ```json
@@ -96,7 +106,7 @@ Creates `<project_root>/.verilib/config.json` with:
 }
 ```
 
-**Gitignore file:**
+**Generated `.gitignore` file:**
 
 Creates `<project_root>/.verilib/.gitignore` to exclude generated files:
 ```
@@ -107,7 +117,27 @@ stubs.json
 proofs.json
 ```
 
-**Blueprint data file (blueprint type only):**
+**Generated `.md` file(dalek-lite):**
+
+```yaml
+---
+code-path: path/to/source/file.rs
+code-line: 42
+code-name: null
+---
+```
+
+**Generated `.md` file (blueprint):**
+
+```yaml
+---
+veri-name: veri:node_id
+dependencies: [veri:dep1, veri:dep2]
+---
+<content from blueprint>
+```
+
+**Generated `blueprint.json` file (blueprint):**
 
 For blueprint projects, generates `<project_root>/.verilib/blueprint.json` by:
 1. Running `leanblueprint web` to generate `blueprint/web/`
@@ -132,36 +162,6 @@ For blueprint projects, generates `<project_root>/.verilib/blueprint.json` by:
 | `kind` | `theorem`, `definition` |
 | `type-status` | `stated`, `can-state`, `not-ready`, `mathlib` |
 | `term-status` | `fully-proved`, `proved`, `defined`, `can-prove` |
-
-**Examples:**
-
-```bash
-# Dalek-lite: Generate .md file hierarchy
-verilib-structure create --type dalek-lite
-
-# Blueprint: Generate .md file hierarchy
-verilib-structure create --type blueprint
-```
-
-**Generated file format (dalek-lite):**
-
-```yaml
----
-code-path: path/to/source/file.rs
-code-line: 42
-code-name: null
----
-```
-
-**Generated file format (blueprint):**
-
-```yaml
----
-veri-name: veri:node_id
-dependencies: [veri:dep1, veri:dep2]
----
-<content from blueprint>
-```
 
 ## atomize
 
