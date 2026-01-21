@@ -33,10 +33,6 @@ enum Commands {
         #[arg(default_value = ".")]
         project_root: PathBuf,
 
-        /// Type of the source to analyze
-        #[arg(long = "type", value_enum)]
-        structure_type: StructureType,
-
         /// Root directory for structure files (default: .verilib/structure)
         #[arg(long)]
         root: Option<PathBuf>,
@@ -66,27 +62,10 @@ enum Commands {
         #[arg(default_value = ".")]
         project_root: PathBuf,
 
-        /// Only verify functions in this module (dalek-lite only)
+        /// Only verify functions in this module
         #[arg(long)]
         verify_only_module: Option<String>,
     },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum StructureType {
-    #[value(name = "dalek-lite")]
-    DalekLite,
-    #[value(name = "blueprint")]
-    Blueprint,
-}
-
-impl std::fmt::Display for StructureType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StructureType::DalekLite => write!(f, "dalek-lite"),
-            StructureType::Blueprint => write!(f, "blueprint"),
-        }
-    }
 }
 
 fn main() -> Result<()> {
@@ -95,9 +74,8 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Create {
             project_root,
-            structure_type,
             root,
-        } => commands::create::run(project_root, structure_type, root),
+        } => commands::create::run(project_root, root),
 
         Commands::Atomize { project_root, update_stubs } => commands::atomize::run(project_root, update_stubs),
 

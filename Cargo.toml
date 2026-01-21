@@ -15,12 +15,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 
-# HTTP client
-reqwest = { version = "0.13", features = ["blocking", "json"] }
-
-# HTML parsing
-scraper = "0.25"
-
 # URL encoding/decoding
 percent-encoding = "2"
 
@@ -30,12 +24,6 @@ glob = "0.3"
 
 # Date/time
 chrono = { version = "0.4", features = ["serde"] }
-
-# Async runtime (for reqwest)
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-
-# Regex for parsing
-regex = "1"
 
 # Error handling
 anyhow = "1"

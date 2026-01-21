@@ -1,11 +1,10 @@
 //! Atomize subcommand implementation.
 //!
-//! Enrich structure files with metadata from SCIP atoms or blueprint.
+//! Enrich structure files with metadata from SCIP atoms.
 
 use crate::config::constants::PROBE_PREFIX;
 use crate::config::ConfigPaths;
 use crate::utils::{check_probe_verus_or_exit, parse_frontmatter, run_command};
-use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use intervaltree::IntervalTree;
 use serde_json::{json, Value};
@@ -18,154 +17,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
         .context("Failed to resolve project root")?;
     let config = ConfigPaths::load(&project_root)?;
 
-    let structure_type = config.config.get_structure_type()?;
-
-    match structure_type {
-        StructureType::Blueprint => {
-            run_blueprint_atomize(&config)?;
-        }
-        StructureType::DalekLite => {
-            run_dalek_atomize(&project_root, &config, update_stubs)?;
-        }
-    }
-
-    Ok(())
-}
-
-// =============================================================================
-// Blueprint atomize
-// =============================================================================
-
-fn run_blueprint_atomize(config: &ConfigPaths) -> Result<()> {
-    if !config.blueprint_json_path.exists() {
-        bail!(
-            "{} not found. Run 'verilib-structure create' first.",
-            config.blueprint_json_path.display()
-        );
-    }
-
-    println!("Loading blueprint from {}...", config.blueprint_json_path.display());
-    let content = std::fs::read_to_string(&config.blueprint_json_path)?;
-    let blueprint_data: HashMap<String, Value> = serde_json::from_str(&content)?;
-
-    // Load structure from .md files
-    println!("Loading structure from {}...", config.structure_root.display());
-    let structure = load_blueprint_structure_from_files(&config.structure_root)?;
-
-    println!("Populating structure metadata from blueprint...");
-    let metadata = populate_blueprint_json_metadata(&structure, &blueprint_data)?;
-
-    println!("Saving enriched structure to {}...", config.structure_json_path.display());
-    let content = serde_json::to_string_pretty(&metadata)?;
-    std::fs::write(&config.structure_json_path, content)?;
-    println!("Done.");
-
-    Ok(())
-}
-
-/// Load blueprint structure from .md files into a HashMap.
-fn load_blueprint_structure_from_files(structure_root: &Path) -> Result<HashMap<String, Value>> {
-    let mut structure = HashMap::new();
-
-    for entry in walkdir::WalkDir::new(structure_root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if !path.extension().map_or(false, |ext| ext == "md") {
-            continue;
-        }
-
-        let frontmatter = match parse_frontmatter(path) {
-            Ok(fm) => fm,
-            Err(_) => continue,
-        };
-
-        let relative_path = path
-            .strip_prefix(structure_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-
-        structure.insert(relative_path, json!(frontmatter));
-    }
-
-    Ok(structure)
-}
-
-/// Generate metadata dictionary from blueprint structure JSON.
-fn populate_blueprint_json_metadata(
-    structure: &HashMap<String, Value>,
-    blueprint_data: &HashMap<String, Value>,
-) -> Result<HashMap<String, Value>> {
-    let mut result = HashMap::new();
-    let mut created_count = 0;
-    let mut skipped_count = 0;
-
-    for (file_path, entry) in structure {
-        let veri_name = match entry.get("veri-name").and_then(|v| v.as_str()) {
-            Some(name) => name,
-            None => {
-                eprintln!("WARNING: Missing veri-name for {}", file_path);
-                skipped_count += 1;
-                continue;
-            }
-        };
-
-        let node_id = veri_name.strip_prefix("veri:").unwrap_or(veri_name);
-
-        if !blueprint_data.contains_key(node_id) {
-            eprintln!(
-                "WARNING: Node '{}' not found in blueprint.json for {}",
-                node_id, file_path
-            );
-            skipped_count += 1;
-            continue;
-        }
-
-        let node_info = &blueprint_data[node_id];
-
-        let mut all_deps = Vec::new();
-        if let Some(type_deps) = node_info.get("type-dependencies").and_then(|v| v.as_array()) {
-            for dep in type_deps {
-                if let Some(s) = dep.as_str() {
-                    all_deps.push(format!("veri:{}", s));
-                }
-            }
-        }
-        if let Some(term_deps) = node_info.get("term-dependencies").and_then(|v| v.as_array()) {
-            for dep in term_deps {
-                if let Some(s) = dep.as_str() {
-                    all_deps.push(format!("veri:{}", s));
-                }
-            }
-        }
-
-        result.insert(
-            veri_name.to_string(),
-            json!({
-                "dependencies": all_deps,
-            }),
-        );
-        created_count += 1;
-    }
-
-    println!("Metadata entries created: {}", created_count);
-    println!("Skipped: {}", skipped_count);
-
-    Ok(result)
-}
-
-// =============================================================================
-// Dalek-lite atomize
-// =============================================================================
-
-fn run_dalek_atomize(
-    project_root: &Path,
-    config: &ConfigPaths,
-    update_stubs: bool,
-) -> Result<()> {
-    let probe_atoms = generate_probe_atoms(project_root, &config.atoms_path)?;
+    let probe_atoms = generate_probe_atoms(&project_root, &config.atoms_path)?;
     let probe_atoms = filter_probe_atoms(&probe_atoms, PROBE_PREFIX);
     let probe_index = generate_probe_index(&probe_atoms);
 
@@ -619,4 +471,3 @@ fn enrich_structure_json(
 
     Ok(result)
 }
-

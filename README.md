@@ -6,13 +6,7 @@ Verilib structure files for outlining verification goals
 
 ### Prerequisites
 
-1. Install dependencies for Blueprint (if using blueprint type).
-   ```
-   apt install libgraphviz-dev graphviz
-   pip install leanblueprint
-   ```
-
-2. Install proof tools: Verus, Verus Analyzer, SCIP (if using dalek-lite type).
+1. Install proof tools: Verus, Verus Analyzer, SCIP.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/installers_for_various_tools
    cd installers_for_various_tools
@@ -21,7 +15,7 @@ Verilib structure files for outlining verification goals
    python3 scip_installer.py
    ```
 
-3. Install atomization and verification tool (if using dalek-lite type).
+2. Install atomization and verification tool.
    ```
    git clone https://github.com/Beneficial-AI-Foundation/probe-verus
    cd probe-verus
@@ -62,15 +56,12 @@ verilib-structure <command> [options]
 
 ## create
 
-Generates structure files from source analysis. Supports two structure types:
-
-- **dalek-lite**: Analyzes Verus/Rust code via `analyze_verus_specs_proofs.py`
-- **blueprint**: Runs `leanblueprint web` and parses dependency graph
+Generates structure files from source analysis. Analyzes Verus/Rust code via `analyze_verus_specs_proofs.py`.
 
 **Usage:**
 
 ```bash
-verilib-structure create [PROJECT_ROOT] --type <type> [--root <root>]
+verilib-structure create [PROJECT_ROOT] [--root <root>]
 ```
 
 **Arguments:**
@@ -81,19 +72,18 @@ verilib-structure create [PROJECT_ROOT] --type <type> [--root <root>]
 
 **Options:**
 
-| Option | Values | Description |
-|--------|--------|-------------|
-| `--type` | `dalek-lite`, `blueprint` | Type of the source to analyze (required) |
-| `--root` | path | Root directory for structure files (default: `.verilib/structure`, ignored for blueprint which uses `blueprint`) |
+| Option | Description |
+|--------|-------------|
+| `--root` | Root directory for structure files (default: `.verilib/structure`) |
 
 **Examples:**
 
 ```bash
-# Dalek-lite: Generate .md file hierarchy
-verilib-structure create --type dalek-lite
+# Generate .md file hierarchy (current directory)
+verilib-structure create
 
-# Blueprint: Generate .md file hierarchy
-verilib-structure create --type blueprint
+# Generate .md file hierarchy for a specific project
+verilib-structure create /path/to/project
 ```
 
 **Generated `config.json` file:**
@@ -101,7 +91,6 @@ verilib-structure create --type blueprint
 Creates `<project_root>/.verilib/config.json` with:
 ```json
 {
-  "structure-type": "dalek-lite",
   "structure-root": ".verilib/structure"
 }
 ```
@@ -117,7 +106,7 @@ stubs.json
 proofs.json
 ```
 
-**Generated `.md` file(dalek-lite):**
+**Generated `.md` file:**
 
 ```yaml
 ---
@@ -127,50 +116,13 @@ code-name: null
 ---
 ```
 
-**Generated `.md` file (blueprint):**
-
-```yaml
----
-veri-name: veri:node_id
-dependencies: [veri:dep1, veri:dep2]
----
-<content from blueprint>
-```
-
-**Generated `blueprint.json` file (blueprint):**
-
-For blueprint projects, generates `<project_root>/.verilib/blueprint.json` by:
-1. Running `leanblueprint web` to generate `blueprint/web/`
-2. Parsing `blueprint/web/dep_graph_document.html`
-3. Extracting node metadata from the dependency graph
-
-```json
-{
-  "node_id": {
-    "kind": "theorem",
-    "type-status": "stated",
-    "term-status": "fully-proved",
-    "type-dependencies": ["dep1", "dep2"],
-    "term-dependencies": ["dep3"],
-    "content": "<html content>"
-  }
-}
-```
-
-| Field | Values |
-|-------|--------|
-| `kind` | `theorem`, `definition` |
-| `type-status` | `stated`, `can-state`, `not-ready`, `mathlib` |
-| `term-status` | `fully-proved`, `proved`, `defined`, `can-prove` |
-
 ## atomize
 
-Generate `stubs.json` file with molecular structure and atom metadata. Optionally, the `.md` stub files can be updated with the `code-name` computed from the `code-path` and `code-line`. Behavior depends on structure type:
+Generate `stubs.json` file with molecular structure and atom metadata. Optionally, the `.md` stub files can be updated with the `code-name` computed from the `code-path` and `code-line`.
 
-- **dalek-lite**: Runs `probe-verus atomize` to generate atom metadata
-- **blueprint**: Reads `blueprint.json` to generate atom metadata
+Runs `probe-verus atomize` to generate atom metadata.
 
-**Note:** Requires `config.json` created by `create`. The type is read from `structure-type` field in the config file.
+**Note:** Requires `config.json` created by `create`.
 
 **Usage:**
 
@@ -207,7 +159,7 @@ verilib-structure atomize --update-stubs
 verilib-structure atomize /path/to/project
 ```
 
-**Enriched stubs.json format (dalek-lite):**
+**Enriched stubs.json format:**
 
 ```json
 {
@@ -222,22 +174,9 @@ verilib-structure atomize /path/to/project
 }
 ```
 
-**Enriched stubs.json format (blueprint):**
-
-```json
-{
-  "veri:node_id": {
-    "dependencies": ["veri:dep1", "veri:dep2"]
-  }
-}
-```
-
 ## specify
 
-Checks specification status and manages specification certs. Behavior depends on structure type:
-
-- **dalek-lite**: Runs `probe-verus specify` to identify functions with `requires`/`ensures` specs
-- **blueprint**: Checks `type-status` in `blueprint.json` (`stated` or `mathlib` = has spec)
+Checks specification status and manages specification certs. Runs `probe-verus specify` to identify functions with `requires`/`ensures` specs.
 
 **Usage:**
 
@@ -253,24 +192,15 @@ verilib-structure specify [PROJECT_ROOT]
 
 **Workflow:**
 
-1. Identifies functions with specs (dalek-lite: requires/ensures, blueprint: type-status)
+1. Identifies functions with specs (requires/ensures)
 2. Compares with existing certs in `.verilib/certs/specify/`
 3. Displays a multiple choice menu of uncertified functions
 4. Creates cert files for user-selected functions
 
-**Blueprint type-status mapping:**
-
-| type-status | Has Spec? |
-|-------------|-----------|
-| `stated` | Yes |
-| `mathlib` | Yes |
-| `can-state` | No |
-| `not-ready` | No |
-
 **Cert files:**
 
 Certs are stored in `.verilib/certs/specify/` with one JSON file per certified function:
-- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
+- Filename: URL-encoded code-name + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -293,10 +223,7 @@ When prompted, you can enter:
 
 ## verify
 
-Runs verification and automatically manages verification certs. Behavior depends on structure type:
-
-- **dalek-lite**: Runs `probe-verus verify` to check proof status
-- **blueprint**: Checks `term-status` in `blueprint.json` (`fully-proved` = verified)
+Runs verification and automatically manages verification certs. Runs `probe-verus verify` to check proof status.
 
 **Usage:**
 
@@ -314,30 +241,21 @@ verilib-structure verify [PROJECT_ROOT] [--verify-only-module <module>]
 
 | Option | Description |
 |--------|-------------|
-| `--verify-only-module` | Only verify functions in this module (dalek-lite only) |
+| `--verify-only-module` | Only verify functions in this module |
 
 **Workflow:**
 
-1. Checks verification status (dalek-lite: probe-verus, blueprint: term-status)
+1. Runs probe-verus verify to check verification status
 2. Filters to only functions in the structure
 3. Compares with existing certs in `.verilib/certs/verify/`
 4. Creates new certs for verified functions without certs
 5. Deletes certs for failed functions with existing certs
 6. Shows summary of all changes
 
-**Blueprint term-status mapping:**
-
-| term-status | Verified? |
-|-------------|-----------|
-| `fully-proved` | Yes |
-| `proved` | No |
-| `defined` | No |
-| `can-prove` | No |
-
 **Cert files:**
 
 Certs are stored in `.verilib/certs/verify/` with one JSON file per verified function:
-- Filename: URL-encoded identifier (code-name or veri-name) + `.json`
+- Filename: URL-encoded code-name + `.json`
 - Content: `{"timestamp": "<ISO 8601 timestamp>"}`
 
 **Examples:**
@@ -349,7 +267,7 @@ verilib-structure verify
 # Run verification for a specific project
 verilib-structure verify /path/to/project
 
-# Run verification for only the edwards module (dalek-lite only)
+# Run verification for only the edwards module
 verilib-structure verify --verify-only-module edwards
 ```
 
@@ -376,40 +294,14 @@ Total certs: 10 → 13
 ============================================================
 ```
 
-## Case Studies
-
-### Dalek-Lite
+## Case Study: Dalek-Lite
 
 1. Create structure files
    ```
    git clone git@github.com:Beneficial-AI-Foundation/dalek-lite.git
    cd dalek-lite
    git checkout -b sl/structure
-   verilib-structure create --type dalek-lite
-   ```
-
-2. Run atomization checks
-   ```
-   verilib-structure atomize
-   ```
-
-3. Run specification checks
-   ```
-   verilib-structure specify
-   ```
-
-4. Run verification checks
-   ```
-   verilib-structure verify
-   ```
-
-### Blueprint (Equational Theories)
-
-1. Create structure files
-   ```
-   git clone git@github.com:Beneficial-AI-Foundation/equational_theories.git
-   cd equational_theories
-   verilib-structure create --type blueprint
+   verilib-structure create
    ```
 
 2. Run atomization checks
@@ -431,7 +323,6 @@ Total certs: 10 → 13
 
 **Requirements:**
 - Rust 1.70 or later
-- OpenSSL development libraries (`libssl-dev` on Ubuntu/Debian)
 
 **Build commands:**
 
@@ -450,7 +341,7 @@ cargo test
 
 # Run with cargo (without installing)
 cargo run -- --help
-cargo run -- create --type blueprint
+cargo run -- create
 ```
 
 ## License

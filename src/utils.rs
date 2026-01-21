@@ -1,7 +1,6 @@
 //! Utility functions for verilib structure.
 
 use crate::config::constants::PROBE_VERUS_REPO;
-use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
@@ -50,11 +49,6 @@ pub fn check_probe_verus_or_exit() -> Result<()> {
         bail!("probe-verus not installed");
     }
     Ok(())
-}
-
-/// Check if leanblueprint CLI tool is installed
-pub fn check_leanblueprint_installed() -> bool {
-    which::which("leanblueprint").is_ok()
 }
 
 /// Get the set of identifiers that already have certs.
@@ -110,16 +104,8 @@ pub fn delete_cert(certs_dir: &Path, name: &str) -> Result<Option<std::path::Pat
     }
 }
 
-/// Get the set of identifier names from the structure files.
-pub fn get_structure_names(
-    structure_type: StructureType,
-    structure_root: &Path,
-) -> Result<HashSet<String>> {
-    let name_field = match structure_type {
-        StructureType::Blueprint => "veri-name",
-        StructureType::DalekLite => "code-name",
-    };
-
+/// Get the set of code-name identifiers from the structure files.
+pub fn get_structure_names(structure_root: &Path) -> Result<HashSet<String>> {
     let mut names = HashSet::new();
 
     if !structure_root.exists() {
@@ -134,7 +120,7 @@ pub fn get_structure_names(
         let path = entry.path();
         if path.extension().map_or(false, |ext| ext == "md") {
             if let Ok(frontmatter) = parse_frontmatter(path) {
-                if let Some(name) = frontmatter.get(name_field).and_then(|v| v.as_str()) {
+                if let Some(name) = frontmatter.get("code-name").and_then(|v| v.as_str()) {
                     names.insert(name.to_string());
                 }
             }
@@ -261,7 +247,6 @@ pub fn run_command(
 /// Display a multiple choice menu and get user selections.
 pub fn display_menu<F>(
     items: &[(String, Value)],
-    _structure_type: StructureType,
     format_item: F,
 ) -> Result<Vec<usize>>
 where
@@ -352,9 +337,7 @@ pub fn parse_github_link(github_link: &str) -> Option<(String, u32)> {
 
 /// Get a display name from a full identifier.
 pub fn get_display_name(name: &str) -> String {
-    if name.starts_with("veri:") {
-        name[5..].to_string()
-    } else if let Some(pos) = name.rfind('#') {
+    if let Some(pos) = name.rfind('#') {
         name[pos + 1..].trim_end_matches("()").to_string()
     } else {
         name.to_string()

@@ -1,16 +1,12 @@
 //! Configuration management for verilib structure.
 
-use crate::StructureType;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// Configuration stored in .verilib/config.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    #[serde(rename = "structure-type")]
-    pub structure_type: String,
-
     #[serde(rename = "structure-root")]
     pub structure_root: String,
 }
@@ -22,7 +18,6 @@ pub struct ConfigPaths {
     pub verilib_path: PathBuf,
     pub structure_root: PathBuf,
     pub structure_json_path: PathBuf,
-    pub blueprint_json_path: PathBuf,
     pub atoms_path: PathBuf,
     pub certs_specify_dir: PathBuf,
     pub certs_verify_dir: PathBuf,
@@ -30,9 +25,8 @@ pub struct ConfigPaths {
 
 impl Config {
     /// Create a new config with the given parameters
-    pub fn new(structure_type: StructureType, root: &str) -> Self {
+    pub fn new(root: &str) -> Self {
         Self {
-            structure_type: structure_type.to_string(),
             structure_root: root.to_string(),
         }
     }
@@ -60,15 +54,6 @@ impl Config {
 
         Ok(config_path)
     }
-
-    /// Get the structure type enum
-    pub fn get_structure_type(&self) -> Result<StructureType> {
-        match self.structure_type.as_str() {
-            "dalek-lite" => Ok(StructureType::DalekLite),
-            "blueprint" => Ok(StructureType::Blueprint),
-            other => bail!("Unknown structure type: {}", other),
-        }
-    }
 }
 
 impl ConfigPaths {
@@ -78,7 +63,7 @@ impl ConfigPaths {
         let config_path = verilib_path.join("config.json");
 
         if !config_path.exists() {
-            bail!(
+            anyhow::bail!(
                 "{} not found. Run 'verilib-structure create' first.",
                 config_path.display()
             );
@@ -96,7 +81,6 @@ impl ConfigPaths {
             config,
             structure_root,
             structure_json_path: verilib_path.join("stubs.json"),
-            blueprint_json_path: verilib_path.join("blueprint.json"),
             atoms_path: verilib_path.join("atoms.json"),
             certs_specify_dir: verilib_path.join("certs").join("specify"),
             certs_verify_dir: verilib_path.join("certs").join("verify"),
@@ -112,10 +96,4 @@ pub mod constants {
 
     /// Probe prefix for filtering atoms
     pub const PROBE_PREFIX: &str = "curve25519-dalek";
-
-    /// Type-status values that indicate a function has a spec (blueprint)
-    pub const BLUEPRINT_SPEC_STATUSES: &[&str] = &["stated", "mathlib"];
-
-    /// Term-status values that indicate a function is verified (blueprint)
-    pub const BLUEPRINT_VERIFIED_STATUSES: &[&str] = &["fully-proved"];
 }

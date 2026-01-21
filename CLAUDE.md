@@ -6,54 +6,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Verilib-structure is a toolkit for managing formal verification workflows. It tracks verification goals as "structure files" that map source code locations to SCIP (Source Code Intelligence Protocol) atoms, then manages certification of specifications and proofs.
 
-## Running Scripts
+## Running the CLI
 
-The main script `structure.py` provides four subcommands:
+The `verilib-structure` binary provides four subcommands:
 
 ```bash
-uv run scripts/structure.py create --type dalek-lite
-uv run scripts/structure.py create --type blueprint
-uv run scripts/structure.py atomize [project_root]
-uv run scripts/structure.py specify [project_root]
-uv run scripts/structure.py verify [project_root] [--verify-only-module <module>]
+verilib-structure create [project_root] [--root <root>]
+verilib-structure atomize [project_root] [--update-stubs]
+verilib-structure specify [project_root]
+verilib-structure verify [project_root] [--verify-only-module <module>]
 ```
 
-The script is self-contained with PEP 723 inline metadata (dependencies declared in script header).
-
 ## Architecture
-
-### Structure Types
-
-| Type | Identifier | Source | Use Case |
-|------|------------|--------|----------|
-| `dalek-lite` | `code-name` | Verus/Rust code | Verus verification projects |
-| `blueprint` | `veri-name` | Lean blueprint | Lean formalization projects |
 
 ### Pipeline Flow
 
 1. **create** - Generates initial structure from source analysis
-   - `dalek-lite`: Calls `<project>/scripts/analyze_verus_specs_proofs.py` CLI
-   - `blueprint`: Runs `leanblueprint web`, parses HTML, saves to `blueprint.json`
+   - Calls `<project>/scripts/analyze_verus_specs_proofs.py` CLI
+   - Creates `.md` files with `code-path`, `code-line`, `code-name` frontmatter
 
 2. **atomize** - Enriches structure with metadata
-   - `dalek-lite`: Runs `probe-verus atomize`, populates `code-name` and code metadata
-   - `blueprint`: Reads `blueprint.json`, generates metadata with `veri-name` and dependencies
+   - Runs `probe-verus atomize`, populates `code-name` and code metadata
+   - Generates `stubs.json` with enriched entries
 
 3. **specify** - Manages specification certs
-   - `dalek-lite`: Runs `probe-verus specify` (has_requires/has_ensures)
-   - `blueprint`: Checks `type-status` in `blueprint.json` (stated/mathlib = has spec)
+   - Runs `probe-verus specify` (has_requires/has_ensures)
+   - Creates certs for functions with specs
 
 4. **verify** - Manages verification certs
-   - `dalek-lite`: Runs `probe-verus verify`
-   - `blueprint`: Checks `term-status` in `blueprint.json` (fully-proved = verified)
+   - Runs `probe-verus verify`
+   - Creates/deletes certs based on verification results
 
 ### Data Storage
 
 All data lives in `.verilib/` within the target project:
-- `config.json` - Structure type and root path
+- `config.json` - Structure root path
 - `stubs.json` - Enriched structure from atomization
-- `blueprint.json` - Blueprint dependency graph (blueprint type only)
-- `tracked_functions.csv` - Tracked functions (dalek-lite type only)
+- `tracked_functions.csv` - Tracked functions
 - `certs/specify/` - Specification certificates
 - `certs/verify/` - Verification certificates
 
@@ -63,7 +52,5 @@ Structure is stored as a hierarchy of `.md` files with YAML frontmatter under th
 
 ### External Dependencies
 
-- `probe-verus` (Rust CLI) - Source code intelligence and verification (dalek-lite only)
-- `leanblueprint` (Python) - Blueprint generation for Lean projects (blueprint only)
-- `graphviz` (system) - Required for leanblueprint
-- Verus/Verus Analyzer - For dalek-lite verification
+- `probe-verus` (Rust CLI) - Source code intelligence and verification
+- Verus/Verus Analyzer - For verification

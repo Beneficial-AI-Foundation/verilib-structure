@@ -2,13 +2,11 @@
 //!
 //! Run verification and manage verification certs.
 
-use crate::config::constants::BLUEPRINT_VERIFIED_STATUSES;
 use crate::config::ConfigPaths;
 use crate::utils::{
     check_probe_verus_or_exit, create_cert, delete_cert, get_display_name, get_existing_certs,
     get_structure_names, run_command,
 };
-use crate::StructureType;
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -21,36 +19,20 @@ pub fn run(project_root: PathBuf, verify_only_module: Option<String>) -> Result<
         .context("Failed to resolve project root")?;
     let config = ConfigPaths::load(&project_root)?;
 
-    let structure_type = config.config.get_structure_type()?;
-
-    let (verified_funcs, failed_funcs) = match structure_type {
-        StructureType::Blueprint => {
-            if verify_only_module.is_some() {
-                eprintln!("Warning: --verify-only-module is ignored for blueprint type");
-            }
-            get_blueprint_verification_results(&config.blueprint_json_path)?
-        }
-
-        StructureType::DalekLite => {
-            let proofs_path = config.verilib_path.join("proofs.json");
-            let proofs_data = run_probe_verify(
-                &project_root,
-                &proofs_path,
-                &config.atoms_path,
-                verify_only_module.as_deref(),
-            )?;
-            get_verification_results(&proofs_data)
-        }
-    };
+    let proofs_path = config.verilib_path.join("proofs.json");
+    let proofs_data = run_probe_verify(
+        &project_root,
+        &proofs_path,
+        &config.atoms_path,
+        verify_only_module.as_deref(),
+    )?;
+    let (verified_funcs, failed_funcs) = get_verification_results(&proofs_data);
 
     println!("\nVerification summary:");
     println!("  Verified: {}", verified_funcs.len());
     println!("  Failed: {}", failed_funcs.len());
 
-    let structure_names = get_structure_names(
-        structure_type,
-        &config.structure_root,
-    )?;
+    let structure_names = get_structure_names(&config.structure_root)?;
     println!("  Functions in structure: {}", structure_names.len());
 
     let verified_in_structure: HashSet<_> = verified_funcs
@@ -241,34 +223,4 @@ fn get_verification_results(proofs_data: &HashMap<String, Value>) -> (HashSet<St
     }
 
     (verified, failed)
-}
-
-/// Extract verified and failed veri-names from blueprint.json based on term-status.
-fn get_blueprint_verification_results(blueprint_path: &Path) -> Result<(HashSet<String>, HashSet<String>)> {
-    if !blueprint_path.exists() {
-        eprintln!("Warning: {} not found", blueprint_path.display());
-        return Ok((HashSet::new(), HashSet::new()));
-    }
-
-    let content = std::fs::read_to_string(blueprint_path)?;
-    let blueprint_data: HashMap<String, Value> = serde_json::from_str(&content)?;
-
-    let mut verified = HashSet::new();
-    let mut failed = HashSet::new();
-
-    for (node_id, node_info) in blueprint_data {
-        let veri_name = format!("veri:{}", node_id);
-        let term_status = node_info
-            .get("term-status")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-
-        if BLUEPRINT_VERIFIED_STATUSES.contains(&term_status) {
-            verified.insert(veri_name);
-        } else {
-            failed.insert(veri_name);
-        }
-    }
-
-    Ok((verified, failed))
 }
