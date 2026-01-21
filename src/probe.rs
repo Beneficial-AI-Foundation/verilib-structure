@@ -8,9 +8,6 @@ use std::path::Path;
 /// Repository URL for probe-verus installation instructions.
 pub const REPO_URL: &str = "https://github.com/Beneficial-AI-Foundation/probe-verus";
 
-/// Default prefix for filtering probe atoms.
-pub const DEFAULT_PREFIX: &str = "curve25519-dalek";
-
 /// Check if probe-verus is installed and bail with instructions if not.
 pub fn require_installed() -> Result<()> {
     if which::which("probe-verus").is_err() {

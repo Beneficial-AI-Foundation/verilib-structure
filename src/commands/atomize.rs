@@ -4,7 +4,7 @@
 
 use crate::config::ConfigPaths;
 use crate::frontmatter;
-use crate::probe::{self, ATOMIZE_INTERMEDIATE_FILES, DEFAULT_PREFIX};
+use crate::probe::{self, ATOMIZE_INTERMEDIATE_FILES};
 use crate::utils::run_command;
 use anyhow::{bail, Context, Result};
 use intervaltree::IntervalTree;
@@ -25,8 +25,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
 
     // Step 2: Generate atoms.json using probe-verus atomize
     let probe_atoms = generate_probe_atoms(&project_root, &config.atoms_path)?;
-    let probe_atoms = filter_by_prefix(&probe_atoms, DEFAULT_PREFIX);
-    println!("Loaded {} filtered atoms", probe_atoms.len());
+    println!("Loaded {} atoms", probe_atoms.len());
 
     // Step 3: Build probe index for fast lookups
     let probe_index = build_line_index(&probe_atoms);
@@ -46,7 +45,7 @@ pub fn run(project_root: PathBuf, update_stubs: bool) -> Result<()> {
     // Optionally update .md files with code-name
     if update_stubs {
         println!("Updating structure files with code-names...");
-        update_structure_files(&probe_index, &probe_atoms, &config.structure_root)?;
+        update_structure_files(&enriched, &config.structure_root)?;
     }
 
     println!("Done.");
@@ -136,16 +135,6 @@ fn generate_probe_atoms(project_root: &Path, atoms_path: &Path) -> Result<HashMa
     Ok(atoms)
 }
 
-/// Filter probe atoms to only those where probe-name starts with prefix.
-fn filter_by_prefix(atoms: &HashMap<String, Value>, prefix: &str) -> HashMap<String, Value> {
-    let uri_prefix = format!("probe:{}/", prefix);
-    atoms
-        .iter()
-        .filter(|(k, _)| k.starts_with(&uri_prefix))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
-}
-
 /// Build an interval tree index for fast line-based lookups.
 fn build_line_index(atoms: &HashMap<String, Value>) -> HashMap<String, IntervalTree<u32, String>> {
     let mut trees: HashMap<String, Vec<(std::ops::Range<u32>, String)>> = HashMap::new();
@@ -191,16 +180,58 @@ fn lookup_code_name(
 ) -> Option<String> {
     let tree = index.get(code_path)?;
 
-    let matching: Vec<_> = tree
-        .query(code_line..code_line + 1)
-        .filter(|iv| iv.range.start == code_line)
-        .collect();
+    let matching: Vec<_> = tree.query(code_line..code_line + 1).collect();
 
     if matching.is_empty() {
         return None;
     }
 
+    let exact: Vec<_> = matching
+        .iter()
+        .filter(|iv| iv.range.start == code_line)
+        .collect();
+
+    if !exact.is_empty() {
+        return Some(exact[0].value.clone());
+    }
+
     Some(matching[0].value.clone())
+}
+
+/// Resolve code-name and atom for an entry.
+/// First tries existing code-name, then falls back to inference from code-path/code-line.
+fn resolve_code_name_and_atom<'a>(
+    entry: &Value,
+    file_path: &str,
+    index: &HashMap<String, IntervalTree<u32, String>>,
+    atoms: &'a HashMap<String, Value>,
+) -> Option<(String, &'a Value)> {
+    // First try: use existing code-name if present and atom exists
+    if let Some(name) = entry.get("code-name").and_then(|v| v.as_str()) {
+        if let Some(atom) = atoms.get(name) {
+            return Some((name.to_string(), atom));
+        }
+    }
+
+    // Fallback: infer from code-path and code-line
+    let code_path = entry.get("code-path").and_then(|v| v.as_str());
+    let code_line = entry
+        .get("code-line")
+        .and_then(|v| v.as_u64())
+        .map(|l| l as u32);
+
+    let (code_path, code_line) = match (code_path, code_line) {
+        (Some(p), Some(l)) => (p, l),
+        _ => {
+            eprintln!("WARNING: Missing code-path or code-line for {}", file_path);
+            return None;
+        }
+    };
+
+    let code_name = lookup_code_name(code_path, code_line, index)?;
+    let atom = atoms.get(&code_name)?;
+
+    Some((code_name, atom))
 }
 
 /// Enrich stubs with code-name and all metadata from atoms.
@@ -214,42 +245,9 @@ fn enrich_stubs(
     let mut skipped_count = 0;
 
     for (file_path, entry) in stubs {
-        let code_path = entry.get("code-path").and_then(|v| v.as_str());
-        let code_line = entry
-            .get("code-line")
-            .and_then(|v| v.as_u64())
-            .map(|l| l as u32);
-
-        let (code_path, code_line) = match (code_path, code_line) {
-            (Some(p), Some(l)) => (p, l),
-            _ => {
-                eprintln!("WARNING: Missing code-path or code-line for {}", file_path);
-                skipped_count += 1;
-                result.insert(file_path.clone(), entry.clone());
-                continue;
-            }
-        };
-
-        let code_name = match lookup_code_name(code_path, code_line, index) {
-            Some(name) => name,
+        let (code_name, atom) = match resolve_code_name_and_atom(entry, file_path, index, atoms) {
+            Some(r) => r,
             None => {
-                eprintln!(
-                    "WARNING: No atom found for {}:{} ({})",
-                    code_path, code_line, file_path
-                );
-                skipped_count += 1;
-                result.insert(file_path.clone(), entry.clone());
-                continue;
-            }
-        };
-
-        let atom = match atoms.get(&code_name) {
-            Some(a) => a,
-            None => {
-                eprintln!(
-                    "WARNING: Atom not found for code-name {} ({})",
-                    code_name, file_path
-                );
                 skipped_count += 1;
                 result.insert(file_path.clone(), entry.clone());
                 continue;
@@ -314,64 +312,39 @@ fn build_enriched_entry(code_name: &str, atom: &Value) -> Value {
     })
 }
 
-/// Update structure .md files with code-name field.
+/// Update structure .md files with code-name field from enriched data.
 fn update_structure_files(
-    index: &HashMap<String, IntervalTree<u32, String>>,
-    atoms: &HashMap<String, Value>,
+    enriched: &HashMap<String, Value>,
     structure_root: &Path,
 ) -> Result<()> {
     let mut updated_count = 0;
-    let mut not_found_count = 0;
+    let mut skipped_count = 0;
 
-    for entry in walkdir::WalkDir::new(structure_root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if !path.extension().map_or(false, |ext| ext == "md") {
+    for (file_path, entry) in enriched {
+        let path = structure_root.join(file_path);
+        if !path.exists() {
+            skipped_count += 1;
             continue;
         }
 
-        let fm = match frontmatter::parse(path) {
-            Ok(fm) => fm,
-            Err(_) => continue,
-        };
-
-        let code_path = fm.get("code-path").and_then(|v| v.as_str());
-        let code_line = fm.get("code-line").and_then(|v| v.as_u64()).map(|l| l as u32);
-
-        let (code_path, code_line) = match (code_path, code_line) {
-            (Some(p), Some(l)) => (p, l),
-            _ => {
-                not_found_count += 1;
-                continue;
-            }
-        };
-
-        let code_name = match lookup_code_name(code_path, code_line, index) {
+        let code_name = match entry.get("code-name").and_then(|v| v.as_str()) {
             Some(name) => name,
             None => {
-                eprintln!(
-                    "WARNING: No atom found for {}:{} ({})",
-                    code_path, code_line, path.display()
-                );
-                not_found_count += 1;
+                skipped_count += 1;
                 continue;
             }
         };
 
-        if !atoms.contains_key(&code_name) {
-            eprintln!(
-                "WARNING: code-name {} not in atoms ({})",
-                code_name,
-                path.display()
-            );
-            not_found_count += 1;
-            continue;
-        }
+        let fm = match frontmatter::parse(&path) {
+            Ok(fm) => fm,
+            Err(_) => {
+                skipped_count += 1;
+                continue;
+            }
+        };
 
         // Read original file content to preserve body
-        let original_content = std::fs::read_to_string(path)?;
+        let original_content = std::fs::read_to_string(&path)?;
         let body_start = original_content
             .find("\n---\n")
             .map(|pos| pos + 5)
@@ -388,12 +361,12 @@ fn update_structure_files(
             fm.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         metadata.insert("code-name".to_string(), json!(code_name));
 
-        frontmatter::write(path, &metadata, body.as_deref())?;
+        frontmatter::write(&path, &metadata, body.as_deref())?;
         updated_count += 1;
     }
 
     println!("Structure files updated: {}", updated_count);
-    println!("Not found/skipped: {}", not_found_count);
+    println!("Skipped: {}", skipped_count);
 
     Ok(())
 }
