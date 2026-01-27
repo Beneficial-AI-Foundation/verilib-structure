@@ -1,5 +1,7 @@
 # verilib-structure
 
+> **Deprecated:** This repository has been merged with [verilib-cli](https://github.com/Beneficial-AI-Foundation/verilib-cli) and is no longer maintained.
+
 Verilib structure files for outlining verification goals
 
 ## Installation
