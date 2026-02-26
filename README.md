@@ -1,4 +1,4 @@
-# verilib-structure
+# verilib-structure (DEPRECATED)
 
 > **Deprecated:** This repository has been merged with [verilib-cli](https://github.com/Beneficial-AI-Foundation/verilib-cli) and is no longer maintained.
 
